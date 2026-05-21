@@ -1,0 +1,30 @@
+.nav-tabs .nav-link:focus,
+.nav-tabs .nav-link:hover,
+.nav-tabs .nav-link {
+  border: unset;
+}
+.nav-tabs {
+  background-color: #ebebeb;
+}
+.nav-tabs .nav-link {
+  position: relative;
+  color: #000;
+  font-weight: 600;
+  padding-left: 50px;
+  padding-right: 50px;
+}
+.nav-tabs .nav-link.active {
+  color: #0d6efd;
+  background-color: #fff;
+  border-radius: unset;
+}
+.nav-tabs .nav-link.active:after {
+  position: absolute;
+  content: "";
+  display: block;
+  width: 100%;
+  height: 5px;
+  background-color: #0d6efd;
+  left: 0;
+  bottom: -2px;
+}
