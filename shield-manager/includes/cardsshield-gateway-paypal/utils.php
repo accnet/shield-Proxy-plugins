@@ -293,7 +293,13 @@ function updateRotationAmount($proxyId, $orderTotal) {
             break;
         }
     }
-    return update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
+    $result = update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
+
+    if (class_exists('Shield_SaaS_Client')) {
+        Shield_SaaS_Client::sync_stats_to_saas('PayPal');
+    }
+
+    return $result;
 }
 
 function getEnabledPaymentGateways() {
@@ -1106,5 +1112,4 @@ function csPaypalGetClientIP()
     }
     return $_SERVER['REMOTE_ADDR'] ?? null;
 }
-
 

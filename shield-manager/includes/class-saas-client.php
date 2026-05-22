@@ -115,4 +115,60 @@ class Shield_SaaS_Client
             'message' => 'Disconnected from SaaS successfully. Rotation options are now unlocked locally.'
         ];
     }
+
+    /**
+     * Push active stats (paid_amount, order_count) for PayPal or Stripe to SaaS
+     */
+    public static function sync_stats_to_saas($PG)
+    {
+        $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
+        if ($connected !== 'yes') {
+            return;
+        }
+
+        $saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', '');
+        $connect_key = Shield_Option_Manager::get('OPT_SHIELD_SAAS_KEY', '');
+        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
+        if (empty($saas_url) || empty($connect_key) || empty($secret)) {
+            return;
+        }
+
+        if (!isset(OPTIONKEYS[$PG])) {
+            return;
+        }
+        $keys = OPTIONKEYS[$PG];
+
+        $proxies = Shield_Option_Manager::get($keys['proxies'], []);
+        $activated = Shield_Option_Manager::get($keys['activatedProxy'], null);
+
+        $stats = [];
+        foreach ($proxies as $p) {
+            $stats[] = [
+                'shieldId'   => $p['id'],
+                'paidAmount' => number_format((float)($p['paid_amount'] ?? 0), 2, '.', ''),
+                'orderCount' => (int)($p['order_count'] ?? 0),
+            ];
+        }
+
+        $payload = [
+            'connectKey'     => $connect_key,
+            'type'           => ($PG === 'Stripe') ? 'stripe' : 'paypal',
+            'activeShieldId' => $activated ? $activated['id'] : null,
+            'stats'          => $stats,
+        ];
+
+        $body = json_encode($payload);
+        $signature = hash_hmac('sha256', $body, $secret);
+
+        wp_remote_post($saas_url . '/api/manager/sync-stats', [
+            'method'      => 'POST',
+            'headers'     => [
+                'Content-Type'             => 'application/json',
+                'X-WooCommerce-Signature'  => $signature,
+            ],
+            'body'        => $body,
+            'timeout'     => 3,
+            'blocking'    => false, // absolutely asynchronous & non-blocking!
+        ]);
+    }
 }

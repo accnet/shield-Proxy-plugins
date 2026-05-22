@@ -202,7 +202,13 @@ function updateRotationAmountStripe($processedProxyId, $orderTotal) {
             break;
         }
     }
-    return update_option(OPT_WOOTIFY_STRIPE_PROXIES, $proxies, true);
+    $result = update_option(OPT_WOOTIFY_STRIPE_PROXIES, $proxies, true);
+
+    if (class_exists('Shield_SaaS_Client')) {
+        Shield_SaaS_Client::sync_stats_to_saas('Stripe');
+    }
+
+    return $result;
 }
 
 function hasPayableProxyStripe($cartTotal) {
@@ -323,5 +329,4 @@ function csStripeGetTransactionId(WC_Order $order) {
     }
     return $id;
 }
-
 
