@@ -2,12 +2,46 @@
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/helpers/helpers.php';
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/class/class-PayPal.php';
 
+function shield_sync_tracking_log($level, $message, $context = []) {
+  $source = 'cards-shield-paypal-sync-tracking';
+  $payload = array_merge([
+    'source' => $source,
+  ], is_array($context) ? $context : []);
+
+  if (function_exists('wc_get_logger')) {
+    $logger = wc_get_logger();
+    if ($logger && method_exists($logger, $level)) {
+      $logger->{$level}($message, $payload);
+      return;
+    }
+  }
+
+  if (function_exists('error_log')) {
+    error_log('[' . $source . '] ' . $message . ' ' . wp_json_encode($payload));
+  }
+}
+
+function shield_sync_tracking_trace_id() {
+  return sanitize_text_field(isset($_SERVER['HTTP_X_SHIELD_TRACE_ID']) ? (string) $_SERVER['HTTP_X_SHIELD_TRACE_ID'] : '');
+}
+
 $method = $_SERVER['REQUEST_METHOD'];
 if ($method === 'POST') {
   Helpers::checkRequest('POST');
 }
 else {
   Helpers::checkRequest('GET');
+}
+if (!Helpers::verifyProxyHmacV2Request()) {
+  shield_sync_tracking_log('warning', 'Rejected unauthorized sync tracking request', [
+    'correlation_id' => shield_sync_tracking_trace_id(),
+    'method' => $method,
+    'request_uri' => isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '',
+    'remote_addr' => isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '',
+  ]);
+  status_header(401);
+  echo json_encode(['success' => false, 'error' => 'unauthorized']);
+  exit;
 }
 
 $rawBody = file_get_contents('php://input');
@@ -34,10 +68,13 @@ if (!is_array($shippingData)) {
 }
 
 $submittedCount = count($shippingData);
+$managerId = Helpers::currentManagerId();
+$traceId = shield_sync_tracking_trace_id();
 
 $paypal = new PayPal();
 $response = [
   'success' => false,
+  'correlation_id' => $traceId,
   'submitted_count' => $submittedCount,
   'batches' => [],
   'total_sent' => 0,
@@ -60,6 +97,11 @@ elseif (isset($decodedJson['debug']) && $decodedJson['debug'] === 'full') {
 try {
   if ($submittedCount === 0) {
     $response['error'] = 'No trackers received';
+    shield_sync_tracking_log('warning', 'Sync tracking request had no trackers', [
+      'correlation_id' => $traceId,
+      'manager_id' => $managerId,
+      'submitted_count' => 0,
+    ]);
     echo json_encode($response);
     return;
   }
@@ -84,6 +126,16 @@ try {
           $createdMap[$ti['transaction_id'] . '|' . $ti['tracking_number']] = true;
         }
       }
+    }
+
+    if (
+      isset($batchResult['order']['name']) &&
+      isset($batchResult['order']['message']) &&
+      empty($createdMap)
+    ) {
+      $processableCount = 0;
+      $batchSuccess = false;
+      $errorMessage = $batchResult['order']['name'] . ': ' . $batchResult['order']['message'];
     }
 
     if (isset($batchResult['order']['errors'][0]['details'])) {
@@ -196,11 +248,26 @@ try {
     ];
     $response['total_sent'] += count($batch);
     $response['total_reported_processable'] += $processableCount;
+
+    if (!$batchSuccess) {
+      shield_sync_tracking_log('error', 'PayPal tracking batch failed', [
+        'correlation_id' => $traceId,
+        'manager_id' => $managerId,
+        'batch_index' => $index,
+        'sent_count' => count($batch),
+        'processable_count' => $processableCount,
+        'created_count' => $createdCount,
+        'duplicate_count' => $duplicateCount,
+        'error_count' => $errorCount,
+        'unknown_count' => $unknownCount,
+        'error_message' => $errorMessage,
+      ]);
+    }
   }
 
   $response['success'] = true;
   foreach ($response['batches'] as $b) {
-    if ($b['processable_count'] === 0) {
+    if (!$b['success'] || $b['processable_count'] === 0) {
       $response['success'] = false;
       break;
     }
@@ -221,13 +288,29 @@ try {
   }
   $response['totals'] = $global;
 
-  if (function_exists('error_log')) {
-    error_log('[cardsshield-sync-tracking] batches=' . count($batches) . ' total_sent=' . $response['total_sent'] . ' total_processable=' . $response['total_reported_processable']);
-  }
+  shield_sync_tracking_log($response['success'] ? 'info' : 'warning', 'Completed PayPal tracking sync request', [
+    'correlation_id' => $traceId,
+    'manager_id' => $managerId,
+    'batch_total' => count($batches),
+    'submitted_count' => $submittedCount,
+    'total_sent' => $response['total_sent'],
+    'total_reported_processable' => $response['total_reported_processable'],
+    'created_count' => $global['created'],
+    'duplicate_count' => $global['duplicate'],
+    'error_count' => $global['error'],
+    'unknown_count' => $global['unknown'],
+    'success' => $response['success'],
+  ]);
 }
 catch (Exception $e) {
   $response['success'] = false;
   $response['exception'] = $e->getMessage();
+  shield_sync_tracking_log('error', 'Unhandled exception during PayPal tracking sync', [
+    'correlation_id' => $traceId,
+    'manager_id' => $managerId,
+    'submitted_count' => $submittedCount,
+    'exception' => $e->getMessage(),
+  ]);
 }
 
 echo json_encode($response);

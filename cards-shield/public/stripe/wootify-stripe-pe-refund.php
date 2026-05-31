@@ -1,51 +1,35 @@
 <?php
-require_once CARDSSHIELD_PLUGIN_DIR . '/includes/stripe-php/init.php';
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/helpers/helpers.php';
-require_once CARDSSHIELD_PLUGIN_DIR . '/includes/config/config-Stripe.php';
-Helpers::checkRequest("GET", false);
+require_once CARDSSHIELD_PLUGIN_DIR . '/includes/class/class-Stripe-Proxy-Service.php';
+Helpers::checkRequest("POST", false);
 header('Content-Type: application/json');
 if (!Helpers::verifyProxyHmacV2Request()) {
+  http_response_code(401);
   status_header(401);
-  echo json_encode(['status' => 'unauthorized']);
-  exit;
-}
-if (!STRIPE_SECRET_KEY) {
-  header('HTTP/1.1 503 Service Unavailable');
-  exit;
-}
-$stripe = new \Stripe\StripeClient(STRIPE_SECRET_KEY);
-
-if (!isset($_GET['transaction_id'], $_GET['amount'])) {
-  http_response_code(400);
-  echo json_encode(['status' => 'error', 'message' => 'Missing transaction_id or amount']);
+  echo json_encode([
+    'success' => false,
+    'status' => 'unauthorized',
+    'code' => 'unauthorized',
+    'message' => 'Unauthorized',
+    'correlation_id' => isset($_SERVER['HTTP_X_SHIELD_TRACE_ID']) ? sanitize_text_field((string) $_SERVER['HTTP_X_SHIELD_TRACE_ID']) : '',
+  ]);
   exit;
 }
 try {
-  $transaction_id = sanitize_text_field(wp_unslash($_GET['transaction_id']));
-  $amount = (int) $_GET['amount'];
-  if ($amount <= 0) {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid refund amount']);
-    exit;
+  $payload = json_decode((string) file_get_contents('php://input'), true);
+  if (!is_array($payload)) {
+    $payload = [];
   }
-  $charge = $stripe->paymentIntents->retrieve($transaction_id);
-  $refunds = $stripe->refunds->create([
-    'charge' => $charge->latest_charge,
-    'reason' => "requested_by_customer",
-    'amount' => $amount,
+  $service = new Shield_Stripe_Proxy_Service();
+  $result = $service->refundPayment($payload);
+  http_response_code(isset($result['http_status']) ? (int) $result['http_status'] : 200);
+  echo wp_json_encode($result);
+} catch (RuntimeException $e) {
+  http_response_code(503);
+  echo wp_json_encode([
+    'success' => false,
+    'status' => 'error',
+    'code' => 'stripe_not_configured',
+    'message' => $e->getMessage(),
   ]);
-  $charge = $stripe->paymentIntents->retrieve(
-    $transaction_id,
-    ['expand' => ['latest_charge.refunds', 'latest_charge.balance_transaction']]
-  );
-  echo json_encode([
-    'refund_obj' => $refunds,
-    'charge_obj' => $charge,
-  ]);
-} catch (\Stripe\Exception\ApiErrorException $e) {
-  http_response_code(400);
-  echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
-} catch (\Throwable $e) {
-  http_response_code(500);
-  echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
 }

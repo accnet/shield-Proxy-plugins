@@ -1,36 +1,32 @@
 <?php
-
-require_once CARDSSHIELD_PLUGIN_DIR . '/includes/stripe-php/init.php';
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/helpers/helpers.php';
-require_once CARDSSHIELD_PLUGIN_DIR . '/includes/config/config-Stripe.php';
+require_once CARDSSHIELD_PLUGIN_DIR . '/includes/class/class-Stripe-Proxy-Service.php';
 Helpers::checkRequest("GET");
 if (!Helpers::verifyProxyHmacV2Request()) {
+  http_response_code(401);
   status_header(401);
-  echo json_encode(['status' => 'unauthorized']);
-  exit;
-}
-if (!STRIPE_SECRET_KEY) {
-  header('HTTP/1.1 503 Service Unavailable');
-  exit;
-}
-$stripe = new \Stripe\StripeClient(STRIPE_SECRET_KEY);
-$orderData = $_GET;
-try {
-  $paymentIntent = $stripe->paymentIntents->retrieve(
-    $orderData['payment_intent_id'],
-    ['expand' => ['latest_charge.refunds', 'latest_charge.balance_transaction']]
-  );
-  if ($paymentIntent->status == "succeeded") {
-    $total = $orderData['amount'] ?? 0.0;
-    Helpers::sendTransactionToShield($total, 'Stripe');
-  }
-  $status = $paymentIntent->status;
-  $normalizedStatus = in_array($status, ['succeeded', 'requires_capture'], true) ? 'success' : $status;
   echo json_encode([
-    'status' => $normalizedStatus,
-    'payment_intent' => $paymentIntent,
-    'charge' => $paymentIntent->latest_charge
+    'success' => false,
+    'status' => 'unauthorized',
+    'code' => 'unauthorized',
+    'message' => 'Unauthorized',
+    'correlation_id' => isset($_SERVER['HTTP_X_SHIELD_TRACE_ID']) ? sanitize_text_field((string) $_SERVER['HTTP_X_SHIELD_TRACE_ID']) : '',
   ]);
-} catch (Stripe\Exception\CardException $e) {
-  echo json_encode(['status' => 'error', 'payment_intent' => []]);
+  exit;
+}
+try {
+  $service = new Shield_Stripe_Proxy_Service();
+  $result = $service->confirmPayment($_GET);
+  http_response_code(isset($result['http_status']) ? (int) $result['http_status'] : 200);
+  echo wp_json_encode($result);
+} catch (RuntimeException $e) {
+  http_response_code(503);
+  echo wp_json_encode([
+    'success' => false,
+    'status' => 'error',
+    'code' => 'stripe_not_configured',
+    'message' => $e->getMessage(),
+    'payment_intent' => [],
+    'charge' => [],
+  ]);
 }

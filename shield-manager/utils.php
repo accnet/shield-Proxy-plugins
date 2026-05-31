@@ -27,11 +27,11 @@ function updateRotationOrder($proxyId, $PG) {
       }
     }
     update_option($keys['proxies'], $proxies, true);
-
+    
     if (class_exists('Shield_SaaS_Client')) {
         Shield_SaaS_Client::sync_stats_to_saas($PG);
     }
-
+    
     return  $activatedProxy;
   }
 }
@@ -359,4 +359,5 @@ function render_form($form_fields, $settings, $gateway = "paypal") {
 <?php
   }
 }
+
 

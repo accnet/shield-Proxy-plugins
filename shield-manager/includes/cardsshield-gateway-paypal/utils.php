@@ -294,11 +294,11 @@ function updateRotationAmount($proxyId, $orderTotal) {
         }
     }
     $result = update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
-
+    
     if (class_exists('Shield_SaaS_Client')) {
         Shield_SaaS_Client::sync_stats_to_saas('PayPal');
     }
-
+    
     return $result;
 }
 
@@ -553,22 +553,31 @@ function syncTrackingInfo() {
             $orderIds = array_unique(array_map(function ($data) {
                 return $data['order_id'];
             }, $shippingDataPart));
+            $traceId = function_exists('wp_generate_uuid4')
+                ? wp_generate_uuid4()
+                : uniqid('shield-track-', true);
             
             // Remove order_id field to add PayPal track
             $shippingDataPush = array_map(function ($data) {
                 unset($data['order_id']);
                 return $data;
             }, $shippingDataPart);
-            $requestUrl = $proxyUrl . "?wootify-paypal-sync-tracking=1&" . http_build_query( [
-                'data-track' => $shippingDataPush
+            $requestUrl = $proxyUrl . "?wootify-paypal-sync-tracking=1";
+            $requestBody = wp_json_encode([
+                'trackers' => $shippingDataPush,
             ]);
-            $response = wp_remote_get($requestUrl, [
+            $response = wp_remote_post($requestUrl, shield_proxy_signed_request_args($proxyUrl, 'POST', $requestUrl, [
                 'timeout' => 5 * 60,
-            ]);
+                'headers' => [
+                    'Content-Type' => 'application/json',
+                    'X-Shield-Trace-Id' => $traceId,
+                ],
+                'body' => $requestBody,
+            ], $requestBody));
             
             if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
                 $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
-                csPaypalErrorLog([$response, $requestUrl, $orderIds], "Sync data error![1]");
+                csPaypalErrorLog([$response, $requestUrl, $orderIds, 'trace_id' => $traceId], "Sync data error![1]");
                 foreach ($orderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
                     $subOrder->update_meta_data( METAKEY_PAYPAL_SYNC_TRACKING_INFO, OPT_CS_PAYPAL_SYNC_ERROR );
@@ -580,7 +589,7 @@ function syncTrackingInfo() {
             $data = json_decode( wp_remote_retrieve_body( $response ) );
             if ( ! $data->success ) {
                 $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
-                csPaypalErrorLog([$response, $requestUrl, $orderIds], "Sync data error![2]");
+                csPaypalErrorLog([$response, $requestUrl, $orderIds, 'trace_id' => $traceId, 'correlation_id' => $data->correlation_id ?? null], "Sync data error![2]");
                 foreach ($orderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
                     $subOrder->update_meta_data( METAKEY_PAYPAL_SYNC_TRACKING_INFO, OPT_CS_PAYPAL_SYNC_ERROR );
@@ -1112,4 +1121,3 @@ function csPaypalGetClientIP()
     }
     return $_SERVER['REMOTE_ADDR'] ?? null;
 }
-

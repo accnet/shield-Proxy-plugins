@@ -207,15 +207,19 @@ function handle_route() {
             'amount' => $order->get_total(),
             'currency' => $order->get_currency(),
         ]);
+        $traceId = csStripeGenerateTraceId();
         $response = wp_remote_get($confirmUrl, shield_proxy_signed_request_args($activatedProxy, 'GET', $confirmUrl, [
             'sslverify' => false,
             'timeout' => 5 * 60,
+            'headers' => [
+                'X-Shield-Trace-Id' => $traceId,
+            ],
         ]));
         $order->update_meta_data(METAKEY_STRIPE_PROXY_URL, $activatedProxy['url']);
         $order->update_meta_data(METAKEY_STRIPE_PROXY_ID, $activatedProxy['id']);
         $order->save();
         if (is_wp_error($response)) {
-            csStripeErrorLog($response, 'Stripe return result error');
+            csStripeErrorLog([$response, 'trace_id' => $traceId, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe return result error');
             wc_add_notice('We cannot process your payment right now, please try another payment method.', 'error');
             return wp_redirect(wc_get_checkout_url());
         }
@@ -225,6 +229,16 @@ function handle_route() {
 
         if ($body->status === 'success') {
             $paymentIntent = $body->payment_intent;
+            csStripeDebugLog([
+                'trace_id' => $traceId,
+                'correlation_id' => $body->correlation_id ?? null,
+                'proxy_url' => $activatedProxy['url'],
+                'proxy_id' => $activatedProxy['id'],
+                'order_id' => $order->get_id(),
+                'payment_intent_id' => $paymentIntent->id ?? null,
+                'intent_status' => isset($paymentIntent->status) ? $paymentIntent->status : null,
+                'status' => $body->status,
+            ], 'Stripe confirm-payment success');
             $intentStatus = isset($paymentIntent->status) ? $paymentIntent->status : null;
             $isAuthorized = $paymentStripeIntent === OPT_WOOTIFY_STRIPE_INTENT_AUTHORIZE || $intentStatus === 'requires_capture';
             if ($isAuthorized) {
@@ -254,7 +268,7 @@ function handle_route() {
             WC()->cart->empty_cart();
             return wp_redirect($order->get_checkout_order_received_url());
         } else {
-            csStripeErrorLog($response, 'Stripe confirm payment error');
+            csStripeErrorLog([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe confirm payment error');
             // Empty cart
             $order->update_status('failed');
             $err = $body->err;
@@ -809,13 +823,17 @@ function WOOTIFY_add_gateway_stripe_init() {
                     $statusUrl = $nextProxyUrl . '?' . http_build_query([
                         'wootify-stripe-pe-get-account-charge-status' => uniqid(),
                     ]);
+                    $traceId = csStripeGenerateTraceId();
                     $response = wp_remote_get($statusUrl, shield_proxy_signed_request_args($nextProxyUrl, 'GET', $statusUrl, [
                         'sslverify' => false,
                         'timeout' => 5 * 60,
+                        'headers' => [
+                            'X-Shield-Trace-Id' => $traceId,
+                        ],
                     ]));
 
                     if (is_wp_error($response)) {
-                        csStripeErrorLog([$nextProxyUrl, $nextProxyId, $response], 'API check charge fail!');
+                        csStripeErrorLog([$nextProxyUrl, $nextProxyId, $response, 'trace_id' => $traceId], 'API check charge fail!');
                         if (isEnabledAmountRotationStripe()) {
                             performProxyAmountRotationStripe(WC()->cart->get_total(false));
                         } elseif (isEnabledOrderRotation('Stripe')) {
@@ -828,14 +846,25 @@ function WOOTIFY_add_gateway_stripe_init() {
                         $bodyResponse = wp_remote_retrieve_body($response);
                         $body = json_decode($bodyResponse);
                         if ($body->status === 'deactive') {
-                            csStripeErrorLog([$nextProxyUrl, $nextProxyId, $bodyResponse], 'Proxy move to unused because check charge status deactive!');
+                            csStripeErrorLog([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'Proxy move to unused because check charge status deactive!');
                             stripeMoveToUnusedProxyIds([WC()->session->get('wootify-stripe-proxy-active-id')]);
                             findAndSetNextProxy();
                         } else if ($body->status === 'active') {
+                            if (isset($body->health_status) && $body->health_status === 'degraded') {
+                                csStripeErrorLog([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'Proxy health degraded but still usable.');
+                            }
+                            csStripeDebugLog([
+                                'trace_id' => $traceId,
+                                'correlation_id' => $body->correlation_id ?? null,
+                                'proxy_url' => $nextProxyUrl,
+                                'proxy_id' => $nextProxyId,
+                                'health_status' => $body->health_status ?? 'healthy',
+                                'mode' => $body->mode ?? null,
+                            ], 'Stripe proxy health check success');
                             $hasShield = true;
                             break;
                         } else {
-                            csStripeErrorLog([$nextProxyUrl, $nextProxyId, $bodyResponse], 'account status unknown!');
+                            csStripeErrorLog([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'account status unknown!');
                             if (isEnabledAmountRotationStripe()) {
                                 performProxyAmountRotationStripe(WC()->cart->get_total(false));
                             } elseif (isEnabledOrderRotation('Stripe')) {
@@ -1042,6 +1071,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                     ],
                 ];
                 $idempotencyKey = 'stripe-make-' . $order->get_id() . '-' . md5((string) ($paymentIntentIdRequest ?: ($_POST['wootify-stripe-payment-method-id'] ?? '')));
+                $traceId = csStripeGenerateTraceId();
                 $payloadJson = wp_json_encode($payload);
                 $response = wp_remote_post($makePaymentUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $makePaymentUrl, [
                     'sslverify' => false,
@@ -1049,6 +1079,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                     'headers' => [
                         'Content-Type' => 'application/json',
                         'X-Shield-Idempotency-Key' => $idempotencyKey,
+                        'X-Shield-Trace-Id' => $traceId,
                     ],
                     'body' => $payloadJson,
                 ], $payloadJson));
@@ -1056,7 +1087,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 $order->update_meta_data(METAKEY_STRIPE_PROXY_ID, $activatedProxy['id']);
                 $order->save();
                 if (is_wp_error($response)) {
-                    csStripeErrorLog($response, 'Stripe request error');
+                    csStripeErrorLog([$response, 'trace_id' => $traceId, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe request error');
                     wc_add_notice('We cannot process your payment right now, please try another payment method.', 'error');
                     return false;
                 }
@@ -1064,6 +1095,15 @@ function WOOTIFY_add_gateway_stripe_init() {
                 $body = json_decode($body);
                 if ($body->status === 'success') {
                     $paymentIntent = $body->payment_intent;
+                    csStripeDebugLog([
+                        'trace_id' => $traceId,
+                        'correlation_id' => $body->correlation_id ?? null,
+                        'proxy_url' => $activatedProxy['url'],
+                        'proxy_id' => $activatedProxy['id'],
+                        'order_id' => $order->get_id(),
+                        'payment_intent_id' => $paymentIntent->id ?? null,
+                        'status' => $body->status,
+                    ], 'Stripe make-payment success');
                     if (isset($body->payment_intent)) {
                         $paymentIntentId = $body->payment_intent->id;
                         csStripeSaveTransactionId($order, $paymentIntentId);
@@ -1090,7 +1130,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                         'redirect' => sprintf('#cs-confirm-pi-%s:%s:%s', $paymentIntent->client_secret, $order_id, $attemptToken),
                     ];
                 } else {
-                    csStripeErrorLog($response, 'Stripe request payment error');
+                    csStripeErrorLog([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe request payment error');
                     // Empty cart
                     $order->update_status('failed');
                     if ($body->code === 'domain_whitelist_not_allow') {
@@ -1183,14 +1223,24 @@ function WOOTIFY_add_gateway_stripe_init() {
                 // do API call
                 $url = $proxyUrl . "?" . http_build_query([
                     'wootify-stripe-pe-refund' => uniqid(),
+                ]);
+                $payload = [
                     'order_id' => $order_id,
                     'transaction_id' => csStripeGetTransactionId($order),
                     'amount' => $this->get_stripe_amount($amount, $order->get_currency()),
                     'reason' => $reason,
-                    'currency' => $order->get_currency()
-                ]);
+                    'currency' => $order->get_currency(),
+                ];
+                $traceId = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('stripe-refund-', true);
+                $payloadJson = wp_json_encode($payload);
 
-                $request = wp_remote_get($url, shield_proxy_signed_request_args($proxyUrl, 'GET', $url, []));
+                $request = wp_remote_post($url, shield_proxy_signed_request_args($proxyUrl, 'POST', $url, [
+                    'headers' => [
+                        'Content-Type' => 'application/json',
+                        'X-Shield-Trace-Id' => $traceId,
+                    ],
+                    'body' => $payloadJson,
+                ], $payloadJson));
 
                 $notice = 'There is an error when process this payment, please contact us for more support or you can try to use Stripe!';
                 if (is_wp_error($request)) {
@@ -1202,7 +1252,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 $body = wp_remote_retrieve_body($request);
                 $result = json_decode($body);
 
-                if (isset($result->refund_obj) && isset($result->refund_obj->status) && $result->refund_obj->status == "succeeded") {
+                if (isset($result->success) && $result->success && isset($result->refund_obj) && isset($result->refund_obj->status) && $result->refund_obj->status == "succeeded") {
                     return [
                         'refund_obj' => $result->refund_obj,
                         'charge_obj' => $result->charge_obj,
@@ -1415,6 +1465,3 @@ function WOOTIFY_stripe_generate_input_order() {
     <div id="WOOTIFY_stripe_pay_for_order_page"></div>
 <?php
 }
-
-
-

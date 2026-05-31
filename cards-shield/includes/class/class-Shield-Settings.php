@@ -6,6 +6,8 @@ class ShieldSettings {
     const OPT_SAAS_URL      = 'shield_saas_url';       // URL của SaaS
     const OPT_CONNECT_STATUS = 'shield_connect_status'; // connected|pending|failed
     const OPT_CONNECT_DATA  = 'shield_connect_data';   // payload từ /api/shields/connect
+    const OPT_LAST_SYNC_AT  = 'shield_last_sync_at';   // thời điểm sync-config thành công gần nhất
+    const OPT_LAST_SYNC_STATUS = 'shield_last_sync_status'; // success|failed
     const OPT_LICENSE_KEY   = 'shield_license_key';    // HMAC key cho shield-manager
 
     public function __construct() {
@@ -67,8 +69,15 @@ class ShieldSettings {
             'test_publishable_key' => $cfg['stripeTestPublishableKey'] ?? '',
             'test_secret_key'      => $cfg['stripeTestSecretKey']      ?? '',
         ]);
+        $synced_at = current_time('mysql');
+        update_option(self::OPT_LAST_SYNC_AT, $synced_at);
+        update_option(self::OPT_LAST_SYNC_STATUS, 'success');
 
-        return rest_ensure_response(['synced' => true]);
+        return rest_ensure_response([
+            'synced' => true,
+            'syncedAt' => $synced_at,
+            'message' => 'site1 sync-config applied successfully',
+        ]);
     }
 
     /* ── Menu ─────────────────────────────────────────────────────── */
@@ -86,6 +95,8 @@ class ShieldSettings {
         $saas_url      = get_option(self::OPT_SAAS_URL, SHIELD_MANAGE_URL);
         $conn_status   = get_option(self::OPT_CONNECT_STATUS, 'pending');
         $conn_data     = get_option(self::OPT_CONNECT_DATA, []);
+        $last_sync_at  = get_option(self::OPT_LAST_SYNC_AT, '');
+        $last_sync_status = get_option(self::OPT_LAST_SYNC_STATUS, 'pending');
         $shield_paypal = get_option('shield_paypal', []);
         $shield_stripe = get_option('shield_stripe', []);
         $shield_data   = get_option('shield_data', []);
@@ -107,6 +118,13 @@ class ShieldSettings {
                     <p style="color:#555;font-size:13px">
                         Shield ID: <code><?= esc_html($conn_data['shieldId']) ?></code> |
                         Name: <strong><?= esc_html($conn_data['name'] ?? '') ?></strong>
+                    </p>
+                <?php endif; ?>
+                <?php if ($last_sync_at) : ?>
+                    <p style="color:#555;font-size:13px">
+                        Sync gần nhất:
+                        <strong><?= esc_html($last_sync_at) ?></strong>
+                        (<?= esc_html(strtoupper($last_sync_status)) ?>)
                     </p>
                 <?php endif; ?>
                 <table class="form-table" style="margin:0">
@@ -216,6 +234,7 @@ class ShieldSettings {
             update_option(self::OPT_SAAS_URL, $saas_url);
             update_option(self::OPT_CONNECT_STATUS, 'connected');
             update_option(self::OPT_CONNECT_DATA, $body);
+            update_option(self::OPT_LAST_SYNC_STATUS, 'success');
 
             // Lưu payment config vào các option mà gateway sử dụng
             if (!empty($body['paymentConfig'])) {
@@ -235,10 +254,12 @@ class ShieldSettings {
                     'test_secret_key'      => $cfg['stripeTestSecretKey'] ?? '',
                 ]);
             }
+            update_option(self::OPT_LAST_SYNC_AT, current_time('mysql'));
 
             wp_send_json_success(['shieldId' => $body['shieldId'], 'name' => $body['name']]);
         } else {
             update_option(self::OPT_CONNECT_STATUS, 'failed');
+            update_option(self::OPT_LAST_SYNC_STATUS, 'failed');
             $error = $body['message'] ?? "HTTP {$code}";
             wp_send_json_error($error);
         }
@@ -263,6 +284,7 @@ class ShieldSettings {
         $body   = json_decode(wp_remote_retrieve_body($response), true);
         $active = !empty($body['active']);
         update_option(self::OPT_CONNECT_STATUS, $active ? 'connected' : 'failed');
+        update_option(self::OPT_LAST_SYNC_STATUS, $active ? 'success' : 'failed');
 
         // Sync payment config nếu SaaS trả về (keys có thể đã thay đổi)
         if ($active && !empty($body['paymentConfig'])) {
@@ -281,6 +303,7 @@ class ShieldSettings {
                 'test_publishable_key' => $cfg['stripeTestPublishableKey'] ?? '',
                 'test_secret_key'      => $cfg['stripeTestSecretKey']      ?? '',
             ]);
+            update_option(self::OPT_LAST_SYNC_AT, current_time('mysql'));
         }
     }
 

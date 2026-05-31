@@ -203,11 +203,11 @@ function updateRotationAmountStripe($processedProxyId, $orderTotal) {
         }
     }
     $result = update_option(OPT_WOOTIFY_STRIPE_PROXIES, $proxies, true);
-
+    
     if (class_exists('Shield_SaaS_Client')) {
         Shield_SaaS_Client::sync_stats_to_saas('Stripe');
     }
-
+    
     return $result;
 }
 
@@ -245,6 +245,12 @@ function csStripeDebugLog($data, $message = '') {
     } else {
         $logger->debug($dataLogString, ['source' => 'cardshield-gateway-stripe-INFO']);
     }
+}
+
+function csStripeGenerateTraceId() {
+    return function_exists('wp_generate_uuid4')
+        ? wp_generate_uuid4()
+        : uniqid('stripe-trace-', true);
 }
 
 function csStripeHandleDataLog($data, $message = '') {
