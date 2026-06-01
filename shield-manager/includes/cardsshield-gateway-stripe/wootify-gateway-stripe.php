@@ -109,7 +109,205 @@ function action_woocommerce_admin_order_totals_after_total_stripe($order_get_id)
     echo $html;
 }
 
+function csStripeApplyWebhookFallbackResult($order, $activatedProxy, $statusData, $traceId) {
+    if (!$order || !is_array($statusData) || empty($statusData['success']) || empty($statusData['found']) || empty($statusData['paymentState'])) {
+        return false;
+    }
+
+    $paymentState = $statusData['paymentState'];
+    $state = $paymentState['state'] ?? '';
+    $paymentIntentId = $paymentState['paymentIntentId'] ?? csStripeGetTransactionId($order);
+    $lastAppliedState = $order->get_meta('_cs_stripe_webhook_last_applied_state');
+    $currentStatus = $order->get_status();
+
+    csStripeDebugLog([
+        'trace_id' => $traceId,
+        'proxy_url' => $activatedProxy['url'] ?? null,
+        'proxy_id' => $activatedProxy['id'] ?? null,
+        'order_id' => $order->get_id(),
+        'payment_intent_id' => $paymentIntentId,
+        'webhook_state' => $state,
+        'event_id' => $paymentState['eventId'] ?? null,
+    ], 'Stripe webhook fallback status received');
+
+    if ($state === 'succeeded' && in_array($currentStatus, ['processing', 'completed'], true)) {
+        return [
+            'handled' => true,
+            'type' => 'success',
+            'skipped' => true,
+        ];
+    }
+
+    if ($state === 'processing' && $currentStatus === 'on-hold' && $lastAppliedState === 'processing') {
+        return [
+            'handled' => true,
+            'type' => 'processing',
+            'skipped' => true,
+        ];
+    }
+
+    if ($state === 'payment_failed' && $currentStatus === 'failed' && $lastAppliedState === 'payment_failed') {
+        return [
+            'handled' => true,
+            'type' => 'failed',
+            'skipped' => true,
+        ];
+    }
+
+    if ($state === 'succeeded') {
+        $order->payment_complete();
+        $order->reduce_order_stock();
+        $order->add_order_note(sprintf(
+            __('Stripe payment recovered by webhook fallback via proxy %s (Payment Intent ID: %s)', 'wootify'),
+            $activatedProxy['url'] ?? '',
+            $paymentIntentId
+        ));
+        csStripeSaveTransactionId($order, $paymentIntentId);
+        $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'succeeded');
+        $order->update_meta_data('_cs_stripe_webhook_last_repair_at', time());
+        $order->save();
+        if (WC()->cart) {
+            WC()->cart->empty_cart();
+        }
+        return [
+            'handled' => true,
+            'type' => 'success',
+        ];
+    }
+
+    if ($state === 'processing') {
+        $order->update_status('on-hold', 'Waiting for Stripe webhook confirmation.');
+        $order->add_order_note(sprintf(
+            __('Stripe payment is still processing according to webhook fallback via proxy %s (Payment Intent ID: %s)', 'wootify'),
+            $activatedProxy['url'] ?? '',
+            $paymentIntentId
+        ));
+        csStripeSaveTransactionId($order, $paymentIntentId);
+        $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'processing');
+        $order->update_meta_data('_cs_stripe_webhook_last_repair_at', time());
+        $order->save();
+        return [
+            'handled' => true,
+            'type' => 'processing',
+        ];
+    }
+
+    if ($state === 'payment_failed') {
+        $order->update_status('failed', 'Stripe webhook fallback marked payment as failed.');
+        $order->add_order_note(sprintf(
+            __('Stripe payment failed according to webhook fallback via proxy %s (Payment Intent ID: %s)', 'wootify'),
+            $activatedProxy['url'] ?? '',
+            $paymentIntentId
+        ));
+        csStripeSaveTransactionId($order, $paymentIntentId);
+        $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'payment_failed');
+        $order->update_meta_data('_cs_stripe_webhook_last_repair_at', time());
+        $order->save();
+        return [
+            'handled' => true,
+            'type' => 'failed',
+        ];
+    }
+
+    return false;
+}
+
+function csStripeAttemptWebhookFallback($order, $activatedProxy, $paymentIntentId, $traceId) {
+    if (!$order || !$activatedProxy || empty($activatedProxy['id']) || empty($paymentIntentId)) {
+        return false;
+    }
+
+    $lastAppliedState = $order->get_meta('_cs_stripe_webhook_last_applied_state');
+    if (!$lastAppliedState) {
+        return false;
+    }
+
+    return [
+        'handled' => true,
+        'type' => $lastAppliedState === 'payment_failed' ? 'failed' : $lastAppliedState,
+        'skipped' => true,
+    ];
+}
+
+function csStripeDirectWebhookCallbackUrl() {
+    return rest_url('shield-manager/v1/stripe-webhook/direct');
+}
+
+function csStripeFindRepairableOrders($limit = 20) {
+    if (!function_exists('wc_get_orders')) {
+        return [];
+    }
+
+    return wc_get_orders([
+        'type' => 'shop_order',
+        'status' => ['pending', 'on-hold'],
+        'payment_method' => 'WOOTIFY_stripe',
+        'limit' => $limit,
+        'orderby' => 'date',
+        'order' => 'DESC',
+        'return' => 'objects',
+    ]);
+}
+
+function csStripeRepairPendingWebhookOrders($limit = 20) {
+    $orders = csStripeFindRepairableOrders($limit);
+    if (empty($orders)) {
+        return [
+            'checked' => 0,
+            'handled' => 0,
+        ];
+    }
+
+    $proxies = get_option(OPT_WOOTIFY_STRIPE_PROXIES, []);
+    $summary = [
+        'checked' => 0,
+        'handled' => 0,
+    ];
+
+    foreach ($orders as $order) {
+        if (!$order instanceof WC_Order) {
+            continue;
+        }
+
+        if ($order->get_meta(METAKEY_WOOTIFY_STRIPE_INTENT_AUTHORIZED) === 'true') {
+            continue;
+        }
+
+        $paymentIntentId = csStripeGetTransactionId($order);
+        $proxyId = $order->get_meta(METAKEY_STRIPE_PROXY_ID);
+        $proxyUrl = $order->get_meta(METAKEY_STRIPE_PROXY_URL);
+        if (empty($paymentIntentId) || empty($proxyId)) {
+            continue;
+        }
+
+        $activatedProxy = findActivatedProxyDataByIdStripe($proxies, $proxyId);
+        if (!$activatedProxy) {
+            $activatedProxy = [
+                'id' => $proxyId,
+                'url' => $proxyUrl,
+            ];
+        }
+
+        $summary['checked']++;
+        $traceId = csStripeGenerateTraceId();
+        $result = csStripeAttemptWebhookFallback($order, $activatedProxy, $paymentIntentId, $traceId);
+        $order->update_meta_data('_cs_stripe_webhook_last_repair_check_at', time());
+        $order->save();
+
+        if (is_array($result) && !empty($result['handled'])) {
+            $summary['handled']++;
+        }
+    }
+
+    if ($summary['checked'] > 0) {
+        csStripeDebugLog($summary, 'Stripe webhook repair cron summary');
+    }
+
+    return $summary;
+}
+
 function WOOTIFY_stripe_rotation_checker() {
+    csStripeRepairPendingWebhookOrders();
 
     $rotationMethod = get_option(OPT_WOOTIFY_STRIPE_ROTATION_METHOD, WOOTIFY_STRIPE_BY_TIME);
     if ($rotationMethod != WOOTIFY_STRIPE_BY_TIME) {
@@ -206,6 +404,9 @@ function handle_route() {
             'payment_intent_id' => csStripeGetTransactionId($order),
             'amount' => $order->get_total(),
             'currency' => $order->get_currency(),
+            'order_id' => $order->get_id(),
+            'shield_id' => $activatedProxy['id'],
+            'manager_callback_url' => csStripeDirectWebhookCallbackUrl(),
         ]);
         $traceId = csStripeGenerateTraceId();
         $response = wp_remote_get($confirmUrl, shield_proxy_signed_request_args($activatedProxy, 'GET', $confirmUrl, [
@@ -220,6 +421,14 @@ function handle_route() {
         $order->save();
         if (is_wp_error($response)) {
             csStripeErrorLog([$response, 'trace_id' => $traceId, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe return result error');
+            $fallback = csStripeAttemptWebhookFallback($order, $activatedProxy, csStripeGetTransactionId($order), $traceId);
+            if (is_array($fallback) && !empty($fallback['handled'])) {
+                if ($fallback['type'] === 'success' || $fallback['type'] === 'processing') {
+                    return wp_redirect($order->get_checkout_order_received_url());
+                }
+                wc_add_notice('We cannot process your payment right now, please try another payment method.[fallback-failed]', 'error');
+                return wp_redirect(wc_get_checkout_url());
+            }
             wc_add_notice('We cannot process your payment right now, please try another payment method.', 'error');
             return wp_redirect(wc_get_checkout_url());
         }
@@ -269,6 +478,18 @@ function handle_route() {
             return wp_redirect($order->get_checkout_order_received_url());
         } else {
             csStripeErrorLog([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe confirm payment error');
+            $fallbackPaymentIntentId = csStripeGetTransactionId($order);
+            if (isset($body->payment_intent) && isset($body->payment_intent->id)) {
+                $fallbackPaymentIntentId = $body->payment_intent->id;
+            } elseif (isset($body->err) && isset($body->err->payment_intent) && isset($body->err->payment_intent->id)) {
+                $fallbackPaymentIntentId = $body->err->payment_intent->id;
+            }
+            $fallback = csStripeAttemptWebhookFallback($order, $activatedProxy, $fallbackPaymentIntentId, $traceId);
+            if (is_array($fallback) && !empty($fallback['handled'])) {
+                if ($fallback['type'] === 'success' || $fallback['type'] === 'processing') {
+                    return wp_redirect($order->get_checkout_order_received_url());
+                }
+            }
             // Empty cart
             $order->update_status('failed');
             $err = $body->err;
@@ -894,7 +1115,6 @@ function WOOTIFY_add_gateway_stripe_init() {
                     }
                     $params = [
                         "wootify-stripe-pe-get-payment-form" => 1,
-                        "need-decide-testmode" => 1,
                         "amount" => WC()->cart->get_total(false) * 100,
                         "currency" => get_woocommerce_currency(),
                     ]
@@ -1048,6 +1268,8 @@ function WOOTIFY_add_gateway_stripe_init() {
                     'payment_intent' => $paymentIntentIdRequest,
                     'payment_method_id' => $_POST['wootify-stripe-payment-method-id'],
                     'order_id' => $order->get_id(),
+                    'shield_id' => $activatedProxy['id'],
+                    'manager_callback_url' => csStripeDirectWebhookCallbackUrl(),
                     'order_invoice' => $this->invoice_prefix . $order->get_order_number(),
                     'order_items' => $items,
                     'statement_descriptor' => $this->get_option('statement_descriptor'),

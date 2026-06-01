@@ -94,7 +94,10 @@ class Shield_Stripe_Proxy_Service {
                         'customer_email' => (string) ($payload['customer_email'] ?? ''),
                         'customer_name' => (string) ($payload['name'] ?? ''),
                         'order_id' => (string) ($payload['order_invoice'] ?? ''),
+                        'woo_order_id' => (string) ($payload['order_id'] ?? ''),
+                        'shield_id' => (string) ($payload['shield_id'] ?? ''),
                         'manager_id' => $this->managerId,
+                        'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
                         'merchant_site' => home_url(),
                     ],
                 ], [
@@ -118,6 +121,22 @@ class Shield_Stripe_Proxy_Service {
                 'amount_minor' => $amountMinor,
                 'currency' => $currency,
             ]);
+
+            if ($paymentIntent->status === 'requires_action') {
+                Helpers::trackStripeWebhookPayment($paymentIntent->id, [
+                    'mode' => $this->detectMode(),
+                    'state' => 'requires_action',
+                    'order_id' => (string) ($payload['order_id'] ?? ''),
+                    'order_invoice' => (string) ($payload['order_invoice'] ?? ''),
+                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'manager_id' => $this->managerId,
+                    'proxy_id' => home_url(),
+                    'trace_id' => $this->traceId,
+                    'is_3ds_candidate' => true,
+                    'last_source' => 'make_payment',
+                ]);
+            }
 
             return $this->successResponse([
                 'code' => 'ok',
@@ -158,6 +177,21 @@ class Shield_Stripe_Proxy_Service {
                 'payment_intent_id' => $paymentIntentId,
                 'status' => $status,
             ]);
+
+            if (in_array($status, ['requires_action', 'processing'], true)) {
+                Helpers::trackStripeWebhookPayment($paymentIntentId, [
+                    'mode' => $this->detectMode(),
+                    'state' => $status,
+                    'order_id' => (string) ($payload['order_id'] ?? ''),
+                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'manager_id' => $this->managerId,
+                    'proxy_id' => home_url(),
+                    'trace_id' => $this->traceId,
+                    'is_3ds_candidate' => true,
+                    'last_source' => 'confirm_payment',
+                ]);
+            }
 
             return $this->successResponse([
                 'code' => 'ok',

@@ -43,6 +43,160 @@ class Shield_SaaS_Receiver
             'callback'            => [__CLASS__, 'handle_force_activate_gateway'],
             'permission_callback' => '__return_true', // checked via signature in handler
         ]);
+
+        register_rest_route('shield-manager/v1', '/stripe-webhook/direct', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'handle_stripe_webhook_direct'],
+            'permission_callback' => '__return_true', // checked via direct site1 HMAC in handler
+        ]);
+    }
+
+    public static function handle_stripe_webhook_direct(WP_REST_Request $request)
+    {
+        $auth = self::verify_site1_direct_hmac($request);
+        if (!$auth['success']) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'invalid_signature',
+                'message' => $auth['message'],
+            ], 401);
+        }
+
+        $payload = json_decode($request->get_body(), true);
+        if (!is_array($payload)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'invalid_payload',
+                'message' => 'Invalid JSON payload',
+            ], 400);
+        }
+
+        $payment_intent_id = sanitize_text_field($payload['paymentIntentId'] ?? '');
+        $state = sanitize_text_field($payload['state'] ?? '');
+        $order_id = absint($payload['orderId'] ?? 0);
+        if (!$payment_intent_id || !$state || !$order_id) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'invalid_payload',
+                'message' => 'paymentIntentId, state, and orderId are required',
+            ], 400);
+        }
+
+        $order = function_exists('wc_get_order') ? wc_get_order($order_id) : null;
+        if (!$order) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'order_not_found',
+                'message' => 'WooCommerce order not found',
+            ], 404);
+        }
+
+        $activated_proxy = [
+            'id' => sanitize_text_field($payload['shieldId'] ?? ''),
+            'url' => esc_url_raw($payload['proxyUrl'] ?? ($payload['proxyId'] ?? '')),
+        ];
+        $status_data = [
+            'success' => true,
+            'found' => true,
+            'paymentState' => [
+                'eventId' => sanitize_text_field($payload['eventId'] ?? ''),
+                'paymentIntentId' => $payment_intent_id,
+                'state' => $state,
+            ],
+        ];
+        $trace_id = sanitize_text_field($payload['traceId'] ?? '');
+
+        if (function_exists('csStripeApplyWebhookFallbackResult')) {
+            $result = csStripeApplyWebhookFallbackResult($order, $activated_proxy, $status_data, $trace_id);
+        } else {
+            $result = self::apply_stripe_webhook_state($order, $payment_intent_id, $state, $activated_proxy);
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Stripe webhook state applied directly from site1',
+            'handled' => is_array($result) ? !empty($result['handled']) : (bool) $result,
+            'result' => $result,
+        ], 200);
+    }
+
+    private static function verify_site1_direct_hmac(WP_REST_Request $request)
+    {
+        $manager_id = sanitize_text_field($request->get_header('X-Shield-Manager-Id') ?? '');
+        $key_id = sanitize_text_field($request->get_header('X-Shield-Key-Id') ?? '');
+        $signature = (string) $request->get_header('X-Shield-Signature');
+        $nonce = sanitize_text_field($request->get_header('X-Shield-Nonce') ?? '');
+        $timestamp = (int) $request->get_header('X-Shield-Timestamp');
+
+        if (!$manager_id || !$key_id || !$signature || !$nonce || !$timestamp) {
+            return ['success' => false, 'message' => 'Missing direct callback HMAC headers'];
+        }
+
+        if (abs(time() - $timestamp) > 300) {
+            return ['success' => false, 'message' => 'Direct callback timestamp expired'];
+        }
+
+        $site = null;
+        foreach (Shield_Site_Registry::all() as $candidate) {
+            if (($candidate['manager_id'] ?? '') === $manager_id && ($candidate['key_id'] ?? '') === $key_id) {
+                $site = $candidate;
+                break;
+            }
+        }
+        if (!$site || empty($site['hmac_secret'])) {
+            return ['success' => false, 'message' => 'Direct callback credential not found'];
+        }
+
+        $nonce_key = 'shield_mgr_direct_n_' . md5($manager_id . '|' . $nonce . '|' . (string) $timestamp);
+        if (get_transient($nonce_key)) {
+            return ['success' => false, 'message' => 'Duplicate direct callback nonce'];
+        }
+        set_transient($nonce_key, '1', 300);
+
+        $request_uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/wp-json/shield-manager/v1/stripe-webhook/direct';
+        $canonical = implode("\n", [
+            strtoupper($request->get_method()),
+            $request_uri,
+            hash('sha256', (string) $request->get_body()),
+            (string) $timestamp,
+            $nonce,
+            $manager_id,
+            $key_id,
+        ]);
+        $expected = hash_hmac('sha256', $canonical, (string) $site['hmac_secret']);
+
+        if (!hash_equals($expected, $signature)) {
+            return ['success' => false, 'message' => 'Direct callback HMAC verification failed'];
+        }
+
+        return ['success' => true, 'message' => 'ok'];
+    }
+
+    private static function apply_stripe_webhook_state($order, $payment_intent_id, $state, $activated_proxy)
+    {
+        if ($state === 'succeeded') {
+            $order->payment_complete();
+            $order->reduce_order_stock();
+            $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'succeeded');
+        } elseif ($state === 'processing') {
+            $order->update_status('on-hold', 'Waiting for Stripe webhook confirmation.');
+            $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'processing');
+        } elseif ($state === 'payment_failed') {
+            $order->update_status('failed', 'Stripe webhook direct callback marked payment as failed.');
+            $order->update_meta_data('_cs_stripe_webhook_last_applied_state', 'payment_failed');
+        } else {
+            return ['handled' => false, 'type' => 'ignored'];
+        }
+
+        $order->update_meta_data('_cs_stripe_webhook_last_repair_at', time());
+        $order->add_order_note(sprintf(
+            'Stripe webhook applied by direct site1 callback via proxy %s (Payment Intent ID: %s)',
+            $activated_proxy['url'] ?? '',
+            $payment_intent_id
+        ));
+        $order->save();
+
+        return ['handled' => true, 'type' => $state];
     }
 
     /**

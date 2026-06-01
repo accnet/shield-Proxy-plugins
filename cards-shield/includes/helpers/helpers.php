@@ -140,4 +140,28 @@ class Helpers {
       'timeout' => 10
     ));
   }
+
+  public static function getStripeWebhookPayments() {
+    $data = get_option('shield_stripe_webhook_payments', []);
+    return is_array($data) ? $data : [];
+  }
+
+  public static function saveStripeWebhookPayments($data) {
+    update_option('shield_stripe_webhook_payments', is_array($data) ? $data : []);
+  }
+
+  public static function trackStripeWebhookPayment($paymentIntentId, array $payload) {
+    $paymentIntentId = sanitize_text_field((string) $paymentIntentId);
+    if ($paymentIntentId === '') {
+      return;
+    }
+
+    $payments = self::getStripeWebhookPayments();
+    $existing = isset($payments[$paymentIntentId]) && is_array($payments[$paymentIntentId]) ? $payments[$paymentIntentId] : [];
+    $payments[$paymentIntentId] = array_merge($existing, $payload, [
+      'payment_intent_id' => $paymentIntentId,
+      'updated_at' => current_time('mysql'),
+    ]);
+    self::saveStripeWebhookPayments($payments);
+  }
 }

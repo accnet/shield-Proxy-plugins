@@ -171,4 +171,56 @@ class Shield_SaaS_Client
             'blocking'    => false, // absolutely asynchronous & non-blocking!
         ]);
     }
+
+    public static function get_stripe_webhook_status($shield_id, $payment_intent_id)
+    {
+        $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
+        if ($connected !== 'yes') {
+            return ['success' => false, 'message' => 'SaaS is not connected'];
+        }
+
+        $saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', '');
+        $connect_key = Shield_Option_Manager::get('OPT_SHIELD_SAAS_KEY', '');
+        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
+        if (empty($saas_url) || empty($connect_key) || empty($secret) || empty($shield_id) || empty($payment_intent_id)) {
+            return ['success' => false, 'message' => 'Missing SaaS webhook status credentials'];
+        }
+
+        $payload = [
+            'connectKey' => $connect_key,
+            'shieldId' => (string) $shield_id,
+            'paymentIntentId' => (string) $payment_intent_id,
+        ];
+
+        $body = wp_json_encode($payload);
+        $signature = hash_hmac('sha256', $body, $secret);
+
+        $response = wp_remote_post($saas_url . '/api/manager/stripe-webhook-status', [
+            'method' => 'POST',
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-WooCommerce-Signature' => $signature,
+            ],
+            'body' => $body,
+            'timeout' => 15,
+        ]);
+
+        if (is_wp_error($response)) {
+            return [
+                'success' => false,
+                'message' => $response->get_error_message(),
+            ];
+        }
+
+        $code = wp_remote_retrieve_response_code($response);
+        $data = json_decode(wp_remote_retrieve_body($response), true);
+        if ($code !== 200 || !is_array($data)) {
+            return [
+                'success' => false,
+                'message' => 'Invalid SaaS webhook status response',
+            ];
+        }
+
+        return $data;
+    }
 }
