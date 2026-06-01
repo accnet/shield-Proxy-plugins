@@ -381,6 +381,40 @@ class ShieldSettings {
             'transition_applied' => $transition_applied,
         ]);
 
+        if (class_exists('Helpers') && method_exists('Helpers', 'queuePaymentTransitionLog') && $payment_intent_id !== '') {
+            $currency = is_object($payment_intent) && isset($payment_intent->currency) ? strtoupper((string) $payment_intent->currency) : null;
+            $amount_minor = null;
+            if (is_object($payment_intent) && isset($payment_intent->amount_received)) {
+                $amount_minor = (int) $payment_intent->amount_received;
+            } elseif (is_object($payment_intent) && isset($payment_intent->amount)) {
+                $amount_minor = (int) $payment_intent->amount;
+            }
+            Helpers::queuePaymentTransitionLog([
+                'gateway' => 'stripe',
+                'mode' => $matched_mode,
+                'source' => 'webhook',
+                'transactionId' => $payment_intent_id,
+                'eventId' => $event_id,
+                'traceId' => $existing_payment['trace_id'] ?? '',
+                'previousState' => $existing_payment['state'] ?? null,
+                'nextState' => $state,
+                'transitionApplied' => $transition_applied,
+                'ignoredReason' => $transition_applied ? null : 'stale_state',
+                'amount' => $amount_minor !== null ? $amount_minor / 100 : null,
+                'currency' => $currency,
+                'orderId' => is_object($metadata) && isset($metadata->woo_order_id) ? (string) $metadata->woo_order_id : ($existing_payment['order_id'] ?? null),
+                'orderNumber' => is_object($metadata) && isset($metadata->order_id) ? (string) $metadata->order_id : ($existing_payment['order_invoice'] ?? null),
+                'managerId' => is_object($metadata) && isset($metadata->manager_id) ? (string) $metadata->manager_id : ($existing_payment['manager_id'] ?? null),
+                'site2Url' => is_object($metadata) && isset($metadata->manager_callback_url) ? (string) $metadata->manager_callback_url : ($existing_payment['manager_callback_url'] ?? null),
+                'metadata' => [
+                    'amount' => $amount_minor !== null ? $amount_minor / 100 : null,
+                    'currency' => $currency,
+                    'is_3ds' => $is_candidate,
+                    'gateway_response_code' => $event_type,
+                ],
+            ]);
+        }
+
         return rest_ensure_response([
             'success' => true,
             'received' => true,
@@ -417,6 +451,12 @@ class ShieldSettings {
         $stripe_webhooks = $this->get_stripe_webhooks_store();
         $stripe_webhook_events = get_option(self::OPT_STRIPE_WEBHOOK_EVENTS, []);
         $stripe_webhook_payments = get_option(self::OPT_STRIPE_WEBHOOK_PAYMENTS, []);
+        $transition_queue = get_option('shield_payment_transition_logs_queue', []);
+        $transition_queue = is_array($transition_queue) ? $transition_queue : [];
+        $transition_last_flush = get_option('shield_payment_transition_logs_last_flush', []);
+        $transition_last_flush = is_array($transition_last_flush) ? $transition_last_flush : [];
+        $transition_warning = get_option('shield_payment_transition_logs_warning', []);
+        $transition_warning = is_array($transition_warning) ? $transition_warning : [];
         $shield_data   = get_option('shield_data', []);
         
         $v2_credentials = function_exists('shield_hmac_keys_v2_all') ? shield_hmac_keys_v2_all() : [];
@@ -458,6 +498,20 @@ class ShieldSettings {
 
         $latest_events = array_slice(is_array($stripe_webhook_events) ? $stripe_webhook_events : [], -10);
         $latest_events = array_reverse($latest_events); // Newest first
+
+        $queue_pending = count($transition_queue);
+        $queue_retrying = 0;
+        $queue_next_attempt = null;
+        foreach ($transition_queue as $item) {
+            $retry_count = is_array($item) ? (int) ($item['retry_count'] ?? 0) : 0;
+            $next_attempt_at = is_array($item) ? (int) ($item['next_attempt_at'] ?? 0) : 0;
+            if ($retry_count > 0) {
+                $queue_retrying++;
+            }
+            if ($next_attempt_at > time() && ($queue_next_attempt === null || $next_attempt_at < $queue_next_attempt)) {
+                $queue_next_attempt = $next_attempt_at;
+            }
+        }
         ?>
         <style>
         .shield-dashboard {
@@ -1042,6 +1096,53 @@ class ShieldSettings {
                                     <?php endforeach; ?>
                                 <?php endif; ?>
                             </div>
+                        </div>
+                    </div>
+
+                    <div class="shield-card">
+                        <div class="shield-card-header">
+                            <h3 class="shield-card-title">📡 Payment Transition Log Queue</h3>
+                            <span class="webhook-badge <?= $queue_pending > 1000 ? 'failed' : ($queue_pending > 0 ? 'pending' : 'enabled') ?>">
+                                <?= esc_html($queue_pending > 0 ? 'PENDING' : 'CLEAR') ?>
+                            </span>
+                        </div>
+                        <div class="shield-card-body">
+                            <div class="meta-label-value">
+                                <span class="meta-label">Pending Rows</span>
+                                <span class="meta-value"><?= esc_html((string) $queue_pending) ?></span>
+                            </div>
+                            <div class="meta-label-value">
+                                <span class="meta-label">Retrying Rows</span>
+                                <span class="meta-value"><?= esc_html((string) $queue_retrying) ?></span>
+                            </div>
+                            <div class="meta-label-value">
+                                <span class="meta-label">Next Attempt</span>
+                                <span class="meta-value"><?= esc_html($queue_next_attempt ? date_i18n('Y-m-d H:i:s', $queue_next_attempt) : 'now') ?></span>
+                            </div>
+                            <div class="meta-label-value">
+                                <span class="meta-label">Last Flush</span>
+                                <span class="meta-value">
+                                    <?= esc_html(!empty($transition_last_flush['at']) ? $transition_last_flush['at'] : 'never') ?>
+                                    <?php if (array_key_exists('success', $transition_last_flush)) : ?>
+                                        (<?= !empty($transition_last_flush['success']) ? 'SUCCESS' : 'FAILED' ?>)
+                                    <?php endif; ?>
+                                </span>
+                            </div>
+                            <?php if (!empty($transition_last_flush['message'])) : ?>
+                                <div class="meta-label-value">
+                                    <span class="meta-label">Last Error</span>
+                                    <span class="meta-value"><?= esc_html($transition_last_flush['message']) ?></span>
+                                </div>
+                            <?php endif; ?>
+                            <?php if (!empty($transition_warning['message'])) : ?>
+                                <div style="margin-top:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;color:#92400e;font-size:11px;">
+                                    <strong>Warning:</strong> <?= esc_html($transition_warning['message']) ?>
+                                    <?php if (!empty($transition_warning['at'])) : ?>
+                                        <br><span><?= esc_html($transition_warning['at']) ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
+                            <p class="shield-input-description">Payment path chỉ ghi local queue. Cron sẽ push batch lên SaaS, lỗi sẽ retry theo backoff.</p>
                         </div>
                     </div>
                 </div>

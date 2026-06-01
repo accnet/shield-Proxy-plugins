@@ -122,6 +122,23 @@ class Shield_Stripe_Proxy_Service {
                 'currency' => $currency,
             ]);
 
+            $this->queuePaymentTransitionLog([
+                'source' => 'make_payment',
+                'transactionId' => $paymentIntent->id,
+                'nextState' => (string) $paymentIntent->status,
+                'amount' => $amountDecimal,
+                'currency' => strtoupper($currency),
+                'orderId' => (string) ($payload['order_id'] ?? ''),
+                'orderNumber' => (string) ($payload['order_invoice'] ?? ''),
+                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'metadata' => [
+                    'amount' => $amountDecimal,
+                    'currency' => strtoupper($currency),
+                    'is_3ds' => $paymentIntent->status === 'requires_action',
+                    'capture_method' => isset($paymentIntent->capture_method) ? (string) $paymentIntent->capture_method : '',
+                ],
+            ]);
+
             if ($paymentIntent->status === 'requires_action') {
                 Helpers::trackStripeWebhookPayment($paymentIntent->id, [
                     'mode' => $this->detectMode(),
@@ -176,6 +193,19 @@ class Shield_Stripe_Proxy_Service {
             $this->log('info', 'Stripe confirm-payment completed', [
                 'payment_intent_id' => $paymentIntentId,
                 'status' => $status,
+            ]);
+
+            $this->queuePaymentTransitionLog([
+                'source' => 'confirm_payment',
+                'transactionId' => $paymentIntentId,
+                'nextState' => (string) $status,
+                'amount' => isset($payload['amount']) ? (float) $payload['amount'] : null,
+                'currency' => isset($payload['currency']) ? strtoupper((string) $payload['currency']) : null,
+                'orderId' => (string) ($payload['order_id'] ?? ''),
+                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'metadata' => [
+                    'is_3ds' => in_array($status, ['requires_action', 'processing'], true),
+                ],
             ]);
 
             if (in_array($status, ['requires_action', 'processing'], true)) {
@@ -235,6 +265,20 @@ class Shield_Stripe_Proxy_Service {
                 'amount_minor' => $amount,
             ]);
 
+            $this->queuePaymentTransitionLog([
+                'source' => 'refund',
+                'transactionId' => $transactionId,
+                'eventId' => isset($refund->id) ? (string) $refund->id : $transactionId . ':refund',
+                'nextState' => 'refunded',
+                'amount' => $amount / 100,
+                'currency' => isset($expandedCharge->currency) ? strtoupper((string) $expandedCharge->currency) : null,
+                'metadata' => [
+                    'amount' => $amount / 100,
+                    'currency' => isset($expandedCharge->currency) ? strtoupper((string) $expandedCharge->currency) : null,
+                    'gateway_response_code' => isset($refund->status) ? (string) $refund->status : 'succeeded',
+                ],
+            ]);
+
             return $this->successResponse([
                 'code' => 'ok',
                 'message' => 'Refund created',
@@ -244,8 +288,36 @@ class Shield_Stripe_Proxy_Service {
                 'payment_intent_id' => $transactionId,
             ]);
         } catch (\Stripe\Exception\ApiErrorException $e) {
+            $this->queuePaymentTransitionLog([
+                'source' => 'refund',
+                'transactionId' => $transactionId ?: 'unknown',
+                'eventId' => ($transactionId ?: 'unknown') . ':refund:stripe_error',
+                'nextState' => 'payment_failed',
+                'transitionApplied' => true,
+                'amount' => $amount > 0 ? $amount / 100 : null,
+                'errorCode' => method_exists($e, 'getStripeCode') ? $e->getStripeCode() : 'stripe_api_error',
+                'errorMessage' => $e->getMessage(),
+                'metadata' => [
+                    'amount' => $amount > 0 ? $amount / 100 : null,
+                    'gateway_response_code' => method_exists($e, 'getStripeCode') ? $e->getStripeCode() : 'stripe_api_error',
+                ],
+            ]);
             return $this->handleStripeException($e, 'Stripe refund failed');
         } catch (\Throwable $e) {
+            $this->queuePaymentTransitionLog([
+                'source' => 'refund',
+                'transactionId' => $transactionId ?: 'unknown',
+                'eventId' => ($transactionId ?: 'unknown') . ':refund:exception',
+                'nextState' => 'payment_failed',
+                'transitionApplied' => true,
+                'amount' => $amount > 0 ? $amount / 100 : null,
+                'errorCode' => 'internal_error',
+                'errorMessage' => $e->getMessage(),
+                'metadata' => [
+                    'amount' => $amount > 0 ? $amount / 100 : null,
+                    'gateway_response_code' => 'internal_error',
+                ],
+            ]);
             return $this->handleThrowable($e, 'Stripe refund failed unexpectedly');
         }
     }
@@ -419,6 +491,20 @@ class Shield_Stripe_Proxy_Service {
 
     private function buildIdempotencyKey(array $parts) {
         return Helpers::getIdempotencyKey(implode('|', $parts));
+    }
+
+    private function queuePaymentTransitionLog(array $data) {
+        if (!class_exists('Helpers') || !method_exists('Helpers', 'queuePaymentTransitionLog')) {
+            return;
+        }
+
+        Helpers::queuePaymentTransitionLog(array_merge([
+            'gateway' => 'stripe',
+            'mode' => $this->detectMode(),
+            'managerId' => $this->managerId,
+            'traceId' => $this->traceId,
+            'transitionApplied' => true,
+        ], $data));
     }
 
     private function log($level, $message, array $context = []) {

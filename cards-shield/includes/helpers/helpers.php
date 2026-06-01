@@ -164,4 +164,211 @@ class Helpers {
     ]);
     self::saveStripeWebhookPayments($payments);
   }
+
+  public static function paymentTransitionMode($gateway) {
+    $gateway = strtolower((string) $gateway);
+    $option = $gateway === 'paypal' ? get_option('shield_paypal', []) : get_option('shield_stripe', []);
+    return is_array($option) && !empty($option['test_mode']) ? 'test' : 'live';
+  }
+
+  public static function queuePaymentTransitionLog(array $log) {
+    $transactionId = sanitize_text_field((string) ($log['transactionId'] ?? ''));
+    if ($transactionId === '') {
+      return false;
+    }
+
+    $gateway = strtolower(sanitize_text_field((string) ($log['gateway'] ?? '')));
+    if (!in_array($gateway, ['stripe', 'paypal'], true)) {
+      return false;
+    }
+
+    $row = array_merge([
+      'gateway' => $gateway,
+      'mode' => self::paymentTransitionMode($gateway),
+      'site1Url' => self::getSiteUrl(),
+      'managerId' => self::currentManagerId(),
+      'site2Url' => null,
+      'orderId' => null,
+      'orderNumber' => null,
+      'eventId' => null,
+      'traceId' => self::requestHeader('X-Shield-Trace-Id'),
+      'previousState' => null,
+      'transitionApplied' => true,
+      'ignoredReason' => null,
+      'amount' => null,
+      'currency' => null,
+      'httpStatus' => null,
+      'errorCode' => null,
+      'errorMessage' => null,
+      'metadata' => null,
+    ], $log);
+
+    $row['gateway'] = $gateway;
+    $row['mode'] = in_array(($row['mode'] ?? ''), ['live', 'test'], true) ? $row['mode'] : self::paymentTransitionMode($gateway);
+    $row['transactionId'] = $transactionId;
+    $row['source'] = sanitize_text_field((string) ($row['source'] ?? ''));
+    $row['nextState'] = sanitize_text_field((string) ($row['nextState'] ?? ''));
+
+    if ($row['source'] === '' || $row['nextState'] === '') {
+      return false;
+    }
+
+    $queue = get_option('shield_payment_transition_logs_queue', []);
+    $queue = is_array($queue) ? $queue : [];
+    $queue[] = [
+      'payload' => $row,
+      'retry_count' => 0,
+      'last_error' => '',
+      'next_attempt_at' => 0,
+      'created_at' => current_time('mysql'),
+    ];
+
+    if (count($queue) > 1000) {
+      update_option('shield_payment_transition_logs_warning', [
+        'message' => 'Payment transition log queue backlog is above 1000 rows.',
+        'pending' => count($queue),
+        'at' => current_time('mysql'),
+      ], false);
+    }
+
+    if (count($queue) > 5000) {
+      $dropped = count($queue) - 5000;
+      $queue = array_slice($queue, -5000);
+      update_option('shield_payment_transition_logs_warning', [
+        'message' => 'Payment transition log queue exceeded 5000 rows; oldest rows were dropped.',
+        'dropped' => $dropped,
+        'pending' => count($queue),
+        'at' => current_time('mysql'),
+      ], false);
+    }
+
+    update_option('shield_payment_transition_logs_queue', $queue, false);
+    return true;
+  }
+
+  public static function flushPaymentTransitionLogs($limit = 50) {
+    $queue = get_option('shield_payment_transition_logs_queue', []);
+    $queue = is_array($queue) ? array_values(array_map([__CLASS__, 'normalizePaymentTransitionQueueItem'], $queue)) : [];
+    if (empty($queue)) {
+      return ['attempted' => false, 'sent' => 0, 'remaining' => 0];
+    }
+
+    $proxyKey = get_option('shield_proxy_key', '');
+    $saasUrl = get_option('shield_saas_url', SHIELD_MANAGE_URL);
+    if (!$proxyKey || !$saasUrl) {
+      return ['attempted' => false, 'sent' => 0, 'remaining' => count($queue), 'message' => 'missing SaaS connection'];
+    }
+
+    $now = time();
+    $batchIndexes = [];
+    $batch = [];
+    $maxBatch = max(1, min(100, (int) $limit));
+    foreach ($queue as $idx => $item) {
+      if ((int) ($item['next_attempt_at'] ?? 0) > $now) {
+        continue;
+      }
+      $batchIndexes[] = $idx;
+      $batch[] = $item['payload'];
+      if (count($batch) >= $maxBatch) {
+        break;
+      }
+    }
+
+    if (empty($batch)) {
+      update_option('shield_payment_transition_logs_queue', $queue, false);
+      return ['attempted' => false, 'sent' => 0, 'remaining' => count($queue), 'message' => 'waiting for retry backoff'];
+    }
+
+    $body = wp_json_encode(['logs' => $batch]);
+    $timestamp = (string) time();
+    try {
+      $nonce = bin2hex(random_bytes(16));
+    } catch (Exception $e) {
+      $nonce = str_replace('.', '', uniqid('ptl', true));
+    }
+    $signature = hash_hmac('sha256', $proxyKey . '.' . $timestamp . '.' . $nonce, $proxyKey);
+
+    $response = wp_remote_post(trailingslashit($saasUrl) . 'api/payment-transition-logs/batch', [
+      'headers' => [
+        'Content-Type' => 'application/json',
+        'X-Shield-Key' => $proxyKey,
+        'X-Shield-Timestamp' => $timestamp,
+        'X-Shield-Nonce' => $nonce,
+        'X-Shield-Signature' => $signature,
+      ],
+      'body' => $body,
+      'timeout' => 10,
+      'sslverify' => false,
+    ]);
+
+    if (is_wp_error($response)) {
+      $queue = self::markPaymentTransitionBatchFailed($queue, $batchIndexes, $response->get_error_message());
+      update_option('shield_payment_transition_logs_last_flush', [
+        'success' => false,
+        'message' => $response->get_error_message(),
+        'at' => current_time('mysql'),
+      ], false);
+      update_option('shield_payment_transition_logs_queue', $queue, false);
+      return ['attempted' => true, 'sent' => 0, 'remaining' => count($queue), 'message' => $response->get_error_message()];
+    }
+
+    $code = (int) wp_remote_retrieve_response_code($response);
+    if ($code < 200 || $code >= 300) {
+      $message = 'HTTP ' . $code;
+      $queue = self::markPaymentTransitionBatchFailed($queue, $batchIndexes, $message);
+      update_option('shield_payment_transition_logs_last_flush', [
+        'success' => false,
+        'message' => $message,
+        'at' => current_time('mysql'),
+      ], false);
+      update_option('shield_payment_transition_logs_queue', $queue, false);
+      return ['attempted' => true, 'sent' => 0, 'remaining' => count($queue), 'message' => $message];
+    }
+
+    foreach (array_reverse($batchIndexes) as $idx) {
+      array_splice($queue, $idx, 1);
+    }
+    $remaining = array_values($queue);
+    update_option('shield_payment_transition_logs_queue', $remaining, false);
+    update_option('shield_payment_transition_logs_last_flush', [
+      'success' => true,
+      'sent' => count($batch),
+      'remaining' => count($remaining),
+      'at' => current_time('mysql'),
+    ], false);
+
+    return ['attempted' => true, 'sent' => count($batch), 'remaining' => count($remaining)];
+  }
+
+  public static function normalizePaymentTransitionQueueItem($item) {
+    if (is_array($item) && isset($item['payload']) && is_array($item['payload'])) {
+      $item['retry_count'] = isset($item['retry_count']) ? (int) $item['retry_count'] : 0;
+      $item['last_error'] = isset($item['last_error']) ? (string) $item['last_error'] : '';
+      $item['next_attempt_at'] = isset($item['next_attempt_at']) ? (int) $item['next_attempt_at'] : 0;
+      $item['created_at'] = isset($item['created_at']) ? (string) $item['created_at'] : current_time('mysql');
+      return $item;
+    }
+
+    return [
+      'payload' => is_array($item) ? $item : [],
+      'retry_count' => 0,
+      'last_error' => '',
+      'next_attempt_at' => 0,
+      'created_at' => current_time('mysql'),
+    ];
+  }
+
+  private static function markPaymentTransitionBatchFailed(array $queue, array $indexes, $message) {
+    foreach ($indexes as $idx) {
+      if (!isset($queue[$idx])) {
+        continue;
+      }
+      $retry = ((int) ($queue[$idx]['retry_count'] ?? 0)) + 1;
+      $delay = min(3600, (int) pow(2, min($retry, 10)) * 60);
+      $queue[$idx]['retry_count'] = $retry;
+      $queue[$idx]['last_error'] = (string) $message;
+      $queue[$idx]['next_attempt_at'] = time() + $delay;
+    }
+    return $queue;
+  }
 }

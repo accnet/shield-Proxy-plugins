@@ -37,26 +37,44 @@ define('CARDSSHIELD_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/class/class-rewrite-and-template-manager.php';
+require_once CARDSSHIELD_PLUGIN_DIR . '/includes/helpers/helpers.php';
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/shield-api.php';
 require_once CARDSSHIELD_PLUGIN_DIR . '/includes/class/class-Shield-Settings.php';
 
 // ── SaaS verify cron ──────────────────────────────────────────────────────
 add_filter('cron_schedules', function ($schedules) {
     $schedules['shield_every_6h'] = ['interval' => 21600, 'display' => 'Every 6 Hours'];
+    $schedules['shield_every_minute'] = ['interval' => 60, 'display' => 'Every Minute'];
     return $schedules;
 });
 
 add_action('shield_saas_verify_cron', ['ShieldSettings', 'cron_verify']);
+add_action('shield_payment_transition_log_flush', function () {
+    if (class_exists('Helpers')) {
+        Helpers::flushPaymentTransitionLogs(100);
+    }
+});
+
+add_action('init', function () {
+    if (!wp_next_scheduled('shield_payment_transition_log_flush')) {
+        wp_schedule_event(time() + 60, 'shield_every_minute', 'shield_payment_transition_log_flush');
+    }
+});
 
 register_activation_hook(__FILE__, function () {
     if (!wp_next_scheduled('shield_saas_verify_cron')) {
         wp_schedule_event(time(), 'shield_every_6h', 'shield_saas_verify_cron');
+    }
+    if (!wp_next_scheduled('shield_payment_transition_log_flush')) {
+        wp_schedule_event(time() + 60, 'shield_every_minute', 'shield_payment_transition_log_flush');
     }
 });
 
 register_deactivation_hook(__FILE__, function () {
     $ts = wp_next_scheduled('shield_saas_verify_cron');
     if ($ts) wp_unschedule_event($ts, 'shield_saas_verify_cron');
+    $flush_ts = wp_next_scheduled('shield_payment_transition_log_flush');
+    if ($flush_ts) wp_unschedule_event($flush_ts, 'shield_payment_transition_log_flush');
 });
 // ─────────────────────────────────────────────────────────────────────────
 
