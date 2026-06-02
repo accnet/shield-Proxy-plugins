@@ -4,6 +4,13 @@
 
 
 
+function shield_is_saas_connected() {
+  if (class_exists('Shield_Option_Manager')) {
+    return Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no') === 'yes';
+  }
+  return get_option('OPT_SHIELD_SAAS_CONNECTED', 'no') === 'yes';
+}
+
 function isEnabledOrderRotation($PG) {
   if (isset(OPTIONKEYS[$PG])) {
     $keys = OPTIONKEYS[$PG];
@@ -41,11 +48,14 @@ function updateRotationOrder($proxyId, $PG) {
 function resetOrderCountIfNeed($PG) {
   if (isset(OPTIONKEYS[$PG])) {
     $keys = OPTIONKEYS[$PG];
-    $lastTimeReset = get_option($keys['lastTimeResetOrderCount'], null);
     $proxies = get_option($keys['proxies'], []);
     if (empty($proxies)) {
       return [];
     }
+    if (shield_is_saas_connected()) {
+      return $proxies;
+    }
+    $lastTimeReset = get_option($keys['lastTimeResetOrderCount'], null);
     // Reset
     if (empty($lastTimeReset) || date('Y-m-d') > $lastTimeReset) {
       return resetOrderCount($proxies, $PG);

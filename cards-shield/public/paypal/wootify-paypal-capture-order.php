@@ -68,7 +68,7 @@ try {
 			$total = isset($_GET['total']) ? (float) $_GET['total'] : 0.0;
 			Helpers::sendTransactionToShield($total, 'PayPal');
 		}
-		$orderCaptureResult['seller_receivable_breakdown'] = $orderCaptureResult['order']['purchase_units'][0]['payments']['captures'][0]['seller_receivable_breakdown'];
+		$orderCaptureResult['seller_receivable_breakdown'] = $capture['seller_receivable_breakdown'] ?? null;
 		echo json_encode($orderCaptureResult);
 	} catch (Exception $e) {
 		if (method_exists('Helpers', 'queuePaymentTransitionLog')) {

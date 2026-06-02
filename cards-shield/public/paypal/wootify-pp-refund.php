@@ -26,7 +26,7 @@ try {
   ];
   $orderRefundResult = $paypal->refund($transactionID, json_encode($refundData));
   $response = [];
-  if ($orderRefundResult['order']['status'] == 'COMPLETED') {
+  if (($orderRefundResult['order']['status'] ?? '') == 'COMPLETED') {
     $response = $orderRefundResult['order'];
   }
   $status = $response ? 'refunded' : 'failed';

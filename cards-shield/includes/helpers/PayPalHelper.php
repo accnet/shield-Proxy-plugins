@@ -41,6 +41,10 @@ class PayPalHelper {
 	}
 
 	protected function _getToken() {
+		if (empty(PAYPAL_ENDPOINTS) || empty(PAYPAL_CLIENT_ID) || empty(PAYPAL_CLIENT_SECRET)) {
+			throw new RuntimeException('PayPal credentials are not configured.');
+		}
+
 		$this->_http->resetHelper();
 		$this->_setDefaultHeaders();
 		$this->_setAPIVersion('1');
@@ -48,6 +52,11 @@ class PayPalHelper {
 		$this->_http->setAuthentication(PAYPAL_CLIENT_ID . ":" . PAYPAL_CLIENT_SECRET);
 		$this->_http->setBody("grant_type=client_credentials");
 		$returnData = $this->_http->sendRequest();
+		if (empty($returnData['access_token'])) {
+			$message = isset($returnData['message']) ? $returnData['message'] : 'PayPal access token was not returned.';
+			$name = isset($returnData['name']) ? $returnData['name'] : 'PAYPAL_AUTH_FAILED';
+			throw new RuntimeException($name . ': ' . $message);
+		}
 		$this->_token = $returnData['access_token'];
 	}
 
@@ -58,8 +67,17 @@ class PayPalHelper {
 	}
 
 	protected function _respond($data) {
+		$success = isset($data['success']) ? (bool) $data['success'] : true;
+		$httpStatus = isset($data['http_status']) ? (int) $data['http_status'] : $this->_http->getLastStatusCode();
+
 		return array(
-			"status" => "success",
+			"status" => $success ? "success" : "error",
+			"success" => $success,
+			"http_status" => $httpStatus,
+			"error" => $success ? null : array(
+				"name" => isset($data['name']) ? $data['name'] : 'PAYPAL_API_ERROR',
+				"message" => isset($data['message']) ? $data['message'] : 'PayPal API request failed.',
+			),
 			"order" => $data
 		);
 	}

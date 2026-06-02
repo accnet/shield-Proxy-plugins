@@ -111,11 +111,14 @@ function isEnabledAmountRotation() {
 }
 
 function resetPaidAmountIfNeed() {
-    $lastTimeReset = get_option(OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT, null);
     $proxies = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
     if (empty($proxies)) {
         return [];
     }
+    if (function_exists('shield_is_saas_connected') && shield_is_saas_connected()) {
+        return $proxies;
+    }
+    $lastTimeReset = get_option(OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT, null);
     // Reset
     if (empty($lastTimeReset) || date('Y-m-d') > $lastTimeReset) {
         return resetPaidAmount($proxies);

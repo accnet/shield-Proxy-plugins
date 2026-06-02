@@ -31,11 +31,14 @@ const METAKEY_CS_STRIPE_CURRENCY = '_cs_stripe_currency';
 const WOOTIFY_STRIPE_FEE_DISPLAY_ORDER_CURRENCY = true;
 
 function resetPaidAmountIfNeedStripe() {
-    $lastTimeReset = get_option(OPT_WOOTIFY_STRIPE_LAST_TIME_RESET_PAID_AMOUNT, null);
     $proxies = get_option(OPT_WOOTIFY_STRIPE_PROXIES, []);
     if (empty($proxies)) {
         return [];
     }
+    if (function_exists('shield_is_saas_connected') && shield_is_saas_connected()) {
+        return $proxies;
+    }
+    $lastTimeReset = get_option(OPT_WOOTIFY_STRIPE_LAST_TIME_RESET_PAID_AMOUNT, null);
     // Reset
     if (empty($lastTimeReset) || date('Y-m-d') > $lastTimeReset) {
         return resetPaidAmountStripe($proxies);

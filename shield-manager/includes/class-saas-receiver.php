@@ -409,6 +409,7 @@ class Shield_SaaS_Receiver
                 continue;
             }
             $keys = OPTIONKEYS[$PG];
+            $gateway = ($PG === 'Stripe') ? 'stripe' : 'paypal';
 
             // Sync rotation method if present in payload
             if ($PG === 'PayPal' && !empty($paypal_method)) {
@@ -429,11 +430,20 @@ class Shield_SaaS_Receiver
 
             $new_proxies = [];
             $position_list = [];
+            $seen_proxy_ids = [];
 
             foreach ($shields as $shield) {
                 if ($shield['status'] !== 'active') {
                     continue;
                 }
+                if (!empty($shield['gateway']) && strtolower((string) $shield['gateway']) !== $gateway) {
+                    continue;
+                }
+                $shield_id = (string)($shield['id'] ?? '');
+                if ($shield_id === '' || isset($seen_proxy_ids[$shield_id])) {
+                    continue;
+                }
+                $seen_proxy_ids[$shield_id] = true;
 
                 $domain_key = ($PG === 'Stripe') ? 'stripeWebDomain' : 'paypalWebDomain';
                 $url = rtrim(!empty($shield[$domain_key]) ? $shield[$domain_key] : $shield['webDomain'], '/');
@@ -443,16 +453,20 @@ class Shield_SaaS_Receiver
                 $connection = shield_auto_connect_site_from_rotation($url);
                 $site_id = $connection['site_id'];
 
-                // Preserve paid_amount and order_count if it already existed
-                $paid_amount = 0;
-                $order_count = 0;
+                // SaaS is authoritative for progress counters when present.
+                $paid_amount = isset($shield['paidAmount']) ? (float)$shield['paidAmount'] : 0;
+                $order_count = isset($shield['orderCount']) ? (int)$shield['orderCount'] : 0;
                 if (isset($current_by_url[$norm_url])) {
-                    $paid_amount = $current_by_url[$norm_url]['paid_amount'] ?? 0;
-                    $order_count = $current_by_url[$norm_url]['order_count'] ?? 0;
+                    if (!isset($shield['paidAmount'])) {
+                        $paid_amount = $current_by_url[$norm_url]['paid_amount'] ?? 0;
+                    }
+                    if (!isset($shield['orderCount'])) {
+                        $order_count = $current_by_url[$norm_url]['order_count'] ?? 0;
+                    }
                 }
 
                 $proxy = [
-                    'id'          => $shield['id'], // SaaS shield ID is used
+                    'id'          => $shield_id, // SaaS shield ID is used
                     'url'         => $url,
                     'site_id'     => $site_id,
                     'paid_amount' => $paid_amount,
@@ -461,7 +475,8 @@ class Shield_SaaS_Receiver
                     'amount'      => isset($shield['rotationAmountLimit']) ? (float)$shield['rotationAmountLimit'] : 0.0,
                     'order'       => isset($shield['rotationOrderLimit']) ? (int)$shield['rotationOrderLimit'] : 0,
                     'shieldKey'   => $shield['shieldKey'] ?? '',
-                    'sort_order'  => ($PG === 'Stripe') ? (int)($shield['stripeRotationOrder'] ?? 0) : (int)($shield['rotationOrder'] ?? 0),
+                    'gateway'     => $gateway,
+                    'sort_order'  => (int)($shield['rotationOrder'] ?? ($shield['stripeRotationOrder'] ?? 0)),
                 ];
 
                 $new_proxies[] = $proxy;
