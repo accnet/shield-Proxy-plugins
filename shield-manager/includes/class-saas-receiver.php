@@ -44,11 +44,49 @@ class Shield_SaaS_Receiver
             'permission_callback' => '__return_true', // checked via signature in handler
         ]);
 
+        register_rest_route('shield-manager/v1', '/rotate-secret', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'handle_rotate_secret'],
+            'permission_callback' => '__return_true', // checked via HMAC in handler
+        ]);
+
         register_rest_route('shield-manager/v1', '/stripe-webhook/direct', [
             'methods'             => 'POST',
             'callback'            => [__CLASS__, 'handle_stripe_webhook_direct'],
             'permission_callback' => '__return_true', // checked via direct site1 HMAC in handler
         ]);
+    }
+
+    /**
+     * Handle SaaS-initiated secret rotation.
+     * Body: { "newSecret": "sec_xxx" }
+     * Signed with the OLD secret. Updates OPT_SHIELD_SAAS_HMAC_SECRET.
+     */
+    public static function handle_rotate_secret(WP_REST_Request $request)
+    {
+        $auth_error = self::verify_saas_request($request);
+        if ($auth_error !== null) {
+            return $auth_error;
+        }
+
+        $raw_body = $request->get_body();
+        $payload = json_decode($raw_body, true);
+        $new_secret = isset($payload['newSecret']) ? trim((string) $payload['newSecret']) : '';
+
+        if (empty($new_secret) || strpos($new_secret, 'sec_') !== 0) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error'   => 'invalid_payload',
+                'message' => 'newSecret is required and must start with sec_'
+            ], 400);
+        }
+
+        Shield_Option_Manager::update('OPT_SHIELD_SAAS_HMAC_SECRET', $new_secret, true);
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'HMAC secret rotated successfully'
+        ], 200);
     }
 
     public static function handle_stripe_webhook_direct(WP_REST_Request $request)
@@ -200,9 +238,13 @@ class Shield_SaaS_Receiver
     }
 
     /**
-     * Handle active-gateways query from SaaS
+     * Verify an incoming SaaS request via HMAC + timestamp.
+     * Returns null on success or a WP_REST_Response error on failure.
+     *
+     * Expected signature: HMAC-SHA256(hmacSecret, "$timestamp.$raw_body")
+     * Header: X-SaaS-Signature, X-SaaS-Timestamp
      */
-    public static function handle_get_active_gateways(WP_REST_Request $request)
+    private static function verify_saas_request(WP_REST_Request $request)
     {
         $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
         if ($connected !== 'yes') {
@@ -213,24 +255,58 @@ class Shield_SaaS_Receiver
             ], 403);
         }
 
-        $signature = $request->get_header('x-saas-signature');
-        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
-        if (empty($signature) || empty($secret)) {
+        $signature = (string) $request->get_header('x-saas-signature');
+        $timestamp  = (int)   $request->get_header('x-saas-timestamp');
+        $secret     = (string) Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
+
+        if (empty($signature) || empty($timestamp) || empty($secret)) {
             return new WP_REST_Response([
                 'success' => false,
                 'error'   => 'missing_credentials',
-                'message' => 'Signature or HMAC secret is missing'
+                'message' => 'Missing signature, timestamp, or HMAC secret'
+            ], 401);
+        }
+
+        if (abs(time() - $timestamp) > 300) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error'   => 'timestamp_expired',
+                'message' => 'Request timestamp is outside the 5-minute window'
             ], 401);
         }
 
         $raw_body = $request->get_body();
-        $expected = hash_hmac('sha256', $raw_body, $secret);
+        $expected = hash_hmac('sha256', $timestamp . '.' . $raw_body, $secret);
         if (!hash_equals($expected, $signature)) {
             return new WP_REST_Response([
                 'success' => false,
                 'error'   => 'invalid_signature',
                 'message' => 'HMAC signature verification failed'
             ], 401);
+        }
+
+        // Replay protection
+        $nonce_key = 'shield_saas_n_' . md5($signature . '|' . $timestamp . '|' . $secret);
+        if (get_transient($nonce_key)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error'   => 'duplicate_request',
+                'message' => 'Duplicate request detected'
+            ], 401);
+        }
+        set_transient($nonce_key, '1', 300);
+
+        return null;
+    }
+
+    /**
+     * Handle active-gateways query from SaaS
+     */
+    public static function handle_get_active_gateways(WP_REST_Request $request)
+    {
+        $auth_error = self::verify_saas_request($request);
+        if ($auth_error !== null) {
+            return $auth_error;
         }
 
         $paypal_act = get_option('OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY', null);
@@ -248,35 +324,12 @@ class Shield_SaaS_Receiver
      */
     public static function handle_force_activate_gateway(WP_REST_Request $request)
     {
-        $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
-        if ($connected !== 'yes') {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'not_connected',
-                'message' => 'Site is not connected to SaaS'
-            ], 403);
-        }
-
-        $signature = $request->get_header('x-saas-signature');
-        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
-        if (empty($signature) || empty($secret)) {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'missing_credentials',
-                'message' => 'Signature or HMAC secret is missing'
-            ], 401);
+        $auth_error = self::verify_saas_request($request);
+        if ($auth_error !== null) {
+            return $auth_error;
         }
 
         $raw_body = $request->get_body();
-        $expected = hash_hmac('sha256', $raw_body, $secret);
-        if (!hash_equals($expected, $signature)) {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'invalid_signature',
-                'message' => 'HMAC signature verification failed'
-            ], 401);
-        }
-
         $payload = json_decode($raw_body, true);
         $type = $payload['type'] ?? '';
         $shieldId = $payload['shieldId'] ?? '';
@@ -347,35 +400,12 @@ class Shield_SaaS_Receiver
      */
     public static function handle_sync(WP_REST_Request $request)
     {
-        $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
-        if ($connected !== 'yes') {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'not_connected',
-                'message' => 'Site is not connected to SaaS'
-            ], 403);
-        }
-
-        $signature = $request->get_header('x-saas-signature');
-        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
-        if (empty($signature) || empty($secret)) {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'missing_credentials',
-                'message' => 'Signature or HMAC secret is missing'
-            ], 401);
+        $auth_error = self::verify_saas_request($request);
+        if ($auth_error !== null) {
+            return $auth_error;
         }
 
         $raw_body = $request->get_body();
-        $expected = hash_hmac('sha256', $raw_body, $secret);
-        if (!hash_equals($expected, $signature)) {
-            return new WP_REST_Response([
-                'success' => false,
-                'error'   => 'invalid_signature',
-                'message' => 'HMAC signature verification failed'
-            ], 401);
-        }
-
         $payload = json_decode($raw_body, true);
         if (!isset($payload['shields']) || !is_array($payload['shields'])) {
             return new WP_REST_Response([
@@ -409,7 +439,6 @@ class Shield_SaaS_Receiver
                 continue;
             }
             $keys = OPTIONKEYS[$PG];
-            $gateway = ($PG === 'Stripe') ? 'stripe' : 'paypal';
 
             // Sync rotation method if present in payload
             if ($PG === 'PayPal' && !empty($paypal_method)) {
@@ -431,12 +460,14 @@ class Shield_SaaS_Receiver
             $new_proxies = [];
             $position_list = [];
             $seen_proxy_ids = [];
+            $expected_gateway = strtolower($PG);
 
             foreach ($shields as $shield) {
                 if ($shield['status'] !== 'active') {
                     continue;
                 }
-                if (!empty($shield['gateway']) && strtolower((string) $shield['gateway']) !== $gateway) {
+                $shield_gateway = strtolower($shield['gateway'] ?? 'paypal');
+                if ($shield_gateway !== $expected_gateway) {
                     continue;
                 }
                 $shield_id = (string)($shield['id'] ?? '');
@@ -474,9 +505,8 @@ class Shield_SaaS_Receiver
                     'timestamp'   => isset($shield['rotationTimeLimit']) ? (int)$shield['rotationTimeLimit'] : 0,
                     'amount'      => isset($shield['rotationAmountLimit']) ? (float)$shield['rotationAmountLimit'] : 0.0,
                     'order'       => isset($shield['rotationOrderLimit']) ? (int)$shield['rotationOrderLimit'] : 0,
-                    'shieldKey'   => $shield['shieldKey'] ?? '',
-                    'gateway'     => $gateway,
-                    'sort_order'  => (int)($shield['rotationOrder'] ?? ($shield['stripeRotationOrder'] ?? 0)),
+                    'proxyToken'  => $shield['shieldKey'] ?? '',
+                    'sort_order'  => ($PG === 'Stripe') ? (int)($shield['stripeRotationOrder'] ?? 0) : (int)($shield['rotationOrder'] ?? 0),
                 ];
 
                 $new_proxies[] = $proxy;

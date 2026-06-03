@@ -81,6 +81,12 @@ class ShieldSettings {
         update_option(self::OPT_LAST_SYNC_AT, $synced_at);
         update_option(self::OPT_LAST_SYNC_STATUS, 'success');
 
+        // Key rotation: if SaaS sends a new shieldKey, store it now (signed with old key — already verified above)
+        $new_shield_key = isset($body['newShieldKey']) ? trim((string) $body['newShieldKey']) : '';
+        if ($new_shield_key !== '' && strpos($new_shield_key, 'sh_') === 0) {
+            update_option(self::OPT_PROXY_KEY, $new_shield_key);
+        }
+
         return rest_ensure_response([
             'synced' => true,
             'syncedAt' => $synced_at,
@@ -1413,9 +1419,15 @@ class ShieldSettings {
             $request->get_method(),
             $request_uri,
         ]), $proxy_key);
+        $body_bound = hash_hmac('sha256', implode('.', [
+            $proxy_key,
+            $timestamp,
+            hash('sha256', (string) $request->get_body()),
+        ]), $proxy_key);
         $legacy = hash_hmac('sha256', $proxy_key . '.' . $timestamp, $proxy_key);
         $is_webhook_control_route = str_starts_with($request->get_route(), '/shield/v1/stripe-webhook/');
         $valid_signature = hash_equals($route_bound, $signature)
+            || hash_equals($body_bound, $signature)
             || (!$is_webhook_control_route && hash_equals($legacy, $signature));
         if (!$valid_signature) {
             return new \WP_Error('unauthorized', 'Invalid signature', ['status' => 401]);

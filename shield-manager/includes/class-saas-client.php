@@ -158,13 +158,15 @@ class Shield_SaaS_Client
         ];
 
         $body = json_encode($payload);
-        $signature = hash_hmac('sha256', $body, $secret);
+        $timestamp = (string) time();
+        $signature = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
 
         wp_remote_post($saas_url . '/api/manager/sync-stats', [
             'method'      => 'POST',
             'headers'     => [
                 'Content-Type'             => 'application/json',
                 'X-WooCommerce-Signature'  => $signature,
+                'X-WooCommerce-Timestamp'  => $timestamp,
             ],
             'body'        => $body,
             'timeout'     => 3,
@@ -193,13 +195,15 @@ class Shield_SaaS_Client
         ];
 
         $body = wp_json_encode($payload);
-        $signature = hash_hmac('sha256', $body, $secret);
+        $timestamp = (string) time();
+        $signature = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
 
         $response = wp_remote_post($saas_url . '/api/manager/stripe-webhook-status', [
             'method' => 'POST',
             'headers' => [
                 'Content-Type' => 'application/json',
                 'X-WooCommerce-Signature' => $signature,
+                'X-WooCommerce-Timestamp' => $timestamp,
             ],
             'body' => $body,
             'timeout' => 15,
