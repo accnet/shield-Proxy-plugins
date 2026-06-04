@@ -15,6 +15,8 @@ class RewriteAndTemplateManager {
             'wootify-paypal-sync-tracking' => '/paypal/wootify-paypal-sync-tracking.php',
             'wootify-stripe-pe-get-payment-form' => '/stripe/wootify-stripe-pe-get-payment-form.php',
             'wootify-stripe-pe-make-payment' => '/stripe/wootify-stripe-pe-make-payment.php',
+            'wootify-stripe-link-express-form' => '/stripe/wootify-stripe-link-express-form.php',
+            'wootify-stripe-link-create-intent' => '/stripe/wootify-stripe-link-create-intent.php',
             'wootify-stripe-pe-get-payment-confirm-form' => '/stripe/wootify-stripe-pe-get-payment-confirm-form.php',
             'wootify-stripe-pe-confirm-payment' => '/stripe/wootify-stripe-pe-confirm-payment.php',
             'wootify-stripe-pe-refund' => '/stripe/wootify-stripe-pe-refund.php',

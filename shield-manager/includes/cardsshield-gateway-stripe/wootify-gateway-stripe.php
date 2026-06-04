@@ -35,8 +35,21 @@ function WOOTIFY_gateway_stripe_daily_process() {
 }
 
 add_action('plugins_loaded', 'WOOTIFY_add_gateway_stripe_init');
+add_action('wp_loaded', 'cs_stripe_handle_link_express_post_route');
 add_action('get_header', 'handle_route');
 add_action('woocommerce_admin_order_totals_after_total', 'action_woocommerce_admin_order_totals_after_total_stripe', 10, 1);
+
+function cs_stripe_get_setting_value($key, $default = null) {
+    $settings = get_option('woocommerce_WOOTIFY_stripe_settings', []);
+    if (!empty($settings) && array_key_exists($key, $settings)) {
+        return $settings[$key];
+    }
+    $legacy = get_option('woocommerce_stripe_settings', []);
+    if (!empty($legacy) && array_key_exists($key, $legacy)) {
+        return $legacy[$key];
+    }
+    return $default;
+}
 
 function WOOTIFY_add_stripe_cron_interval($schedules) {
     $schedules['one_minute'] = array(
@@ -368,6 +381,11 @@ function WOOTIFY_stripe_rotation_checker() {
 }
 
 function handle_route() {
+    if (isset($_POST['wootify-stripe-link-create-woo-order'])) {
+        cs_stripe_handle_link_express_create_woo_order();
+        exit();
+    }
+
     if (isset($_GET['WOOTIFY_stripe_return_result']) && isset($_GET['order_id'])) {
         $order = wc_get_order($_GET['order_id']);
         if (!$order) {
@@ -507,6 +525,178 @@ function handle_route() {
             wc_add_notice('We cannot process your payment right now, please try another payment method.[12]', 'error');
             return wp_redirect(wc_get_checkout_url());
         }
+    }
+}
+
+function cs_stripe_handle_link_express_post_route() {
+    if (!isset($_POST['wootify-stripe-link-create-woo-order'])) {
+        return;
+    }
+
+    cs_stripe_handle_link_express_create_woo_order();
+    exit();
+}
+
+function cs_stripe_first_non_empty($values) {
+    foreach ($values as $value) {
+        if (is_array($value) || is_object($value)) {
+            continue;
+        }
+        $value = sanitize_text_field(wp_unslash((string) $value));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return '';
+}
+
+function cs_stripe_order_shipping_payload(WC_Order $order) {
+    $billingName = trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name());
+    $shippingName = trim($order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name());
+
+    return [
+        'name' => cs_stripe_first_non_empty([$shippingName, $billingName]),
+        'phone' => cs_stripe_first_non_empty([
+            method_exists($order, 'get_shipping_phone') ? $order->get_shipping_phone() : '',
+            $order->get_billing_phone(),
+        ]),
+        'address' => [
+            'city' => cs_stripe_first_non_empty([$order->get_shipping_city(), $order->get_billing_city()]),
+            'country' => cs_stripe_first_non_empty([$order->get_shipping_country(), $order->get_billing_country()]),
+            'line1' => cs_stripe_first_non_empty([$order->get_shipping_address_1(), $order->get_billing_address_1()]),
+            'line2' => cs_stripe_first_non_empty([$order->get_shipping_address_2(), $order->get_billing_address_2()]),
+            'postal_code' => cs_stripe_first_non_empty([$order->get_shipping_postcode(), $order->get_billing_postcode()]),
+            'state' => cs_stripe_first_non_empty([$order->get_shipping_state(), $order->get_billing_state()]),
+        ],
+    ];
+}
+
+function cs_stripe_order_items_payload(WC_Order $order, WC_WOOTIFY_Gateway_Stripe $gateway) {
+    $items = [];
+    foreach ($order->get_items() as $it) {
+        $product = wc_get_product($it->get_product_id());
+        $productName = $product ? $gateway->getProductTitle($product->get_name()) : $it->get_name();
+        $qty = max(1, (int) $it->get_quantity());
+        $amount = round(((float) $it->get_subtotal()) / $qty, $gateway->get_number_of_decimal_digits());
+        $items[] = [
+            'name' => $productName,
+            'quantity' => $qty,
+            'total' => $amount,
+        ];
+    }
+    return $items;
+}
+
+function cs_stripe_handle_link_express_create_woo_order() {
+    if (!function_exists('WC') || !WC()->cart) {
+        wp_send_json_error(['message' => 'Cart is not available.'], 400);
+    }
+
+    $confirmationToken = isset($_POST['confirmation_token']) ? sanitize_text_field(wp_unslash((string) $_POST['confirmation_token'])) : '';
+    if ($confirmationToken === '') {
+        wp_send_json_error(['message' => 'Missing Stripe Link confirmation token.'], 400);
+    }
+
+    $_POST['payment_method'] = 'WOOTIFY_stripe';
+    $paymentGateways = WC()->payment_gateways->payment_gateways();
+    if (empty($paymentGateways['WOOTIFY_stripe']) || !$paymentGateways['WOOTIFY_stripe'] instanceof WC_WOOTIFY_Gateway_Stripe) {
+        wp_send_json_error(['message' => 'Stripe gateway is not available.'], 400);
+    }
+    $gateway = $paymentGateways['WOOTIFY_stripe'];
+
+    $activeProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+    $activatedProxy = findActivatedProxyDataByIdStripe(get_option(OPT_WOOTIFY_STRIPE_PROXIES, []), $activeProxyId);
+    if (!$activatedProxy) {
+        wp_send_json_error(['message' => 'Stripe shield is not available.'], 400);
+    }
+
+    try {
+        $checkout = WC()->checkout();
+        $postedData = $checkout->get_posted_data();
+        $postedData['payment_method'] = 'WOOTIFY_stripe';
+        $orderId = $checkout->create_order($postedData);
+        if (is_wp_error($orderId)) {
+            wp_send_json_error(['message' => $orderId->get_error_message()], 400);
+        }
+        $order = wc_get_order($orderId);
+        if (!$order instanceof WC_Order) {
+            wp_send_json_error(['message' => 'Unable to create Woo order.'], 500);
+        }
+
+        $order->set_payment_method($gateway);
+        $order->update_meta_data(METAKEY_STRIPE_PROXY_URL, $activatedProxy['url']);
+        $order->update_meta_data(METAKEY_STRIPE_PROXY_ID, $activatedProxy['id']);
+        $order->update_meta_data('_shield_payment_method', 'stripe');
+        $order->update_meta_data('_shield_payment_url', $activatedProxy['url']);
+        $order->update_meta_data('_shield_stripe_funding_source', 'link');
+        $attemptToken = uniqid('stripe_link_att_');
+        $order->update_meta_data('_cs_stripe_attempt_token', $attemptToken);
+        $order->add_order_note(sprintf(__('Starting Stripe Link express checkout with proxy %s', 'wootify'), $activatedProxy['url']), 0, false);
+        $order->save();
+
+        $paymentStripeIntent = $gateway->get_option('intent');
+        $payload = [
+            'capture_method' => $paymentStripeIntent === OPT_WOOTIFY_STRIPE_INTENT_AUTHORIZE ? 'manual' : 'automatic',
+            'confirmation_token' => $confirmationToken,
+            'order_id' => $order->get_id(),
+            'shield_id' => $activatedProxy['id'],
+            'manager_callback_url' => csStripeDirectWebhookCallbackUrl(),
+            'order_invoice' => $gateway->invoice_prefix . $order->get_order_number(),
+            'order_items' => cs_stripe_order_items_payload($order, $gateway),
+            'statement_descriptor' => $gateway->get_option('statement_descriptor'),
+            'amount' => $order->get_total(),
+            'customer_zipcode' => $order->get_billing_postcode(),
+            'customer_email' => $order->get_billing_email(),
+            'currency' => $order->get_currency(),
+            'name' => trim($order->get_billing_first_name() . ' ' . $order->get_billing_last_name()),
+            'email' => $order->get_billing_email(),
+            'shipping' => cs_stripe_order_shipping_payload($order),
+        ];
+
+        $createIntentUrl = $activatedProxy['url'] . '?' . http_build_query([
+            'wootify-stripe-link-create-intent' => uniqid(),
+        ]);
+        $idempotencyKey = 'stripe-link-' . $order->get_id() . '-' . md5($confirmationToken);
+        $traceId = csStripeGenerateTraceId();
+        $payloadJson = wp_json_encode($payload);
+        $response = wp_remote_post($createIntentUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $createIntentUrl, [
+            'sslverify' => false,
+            'timeout' => 5 * 60,
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'X-Shield-Idempotency-Key' => $idempotencyKey,
+                'X-Shield-Trace-Id' => $traceId,
+            ],
+            'body' => $payloadJson,
+        ], $payloadJson));
+
+        if (is_wp_error($response)) {
+            $order->update_status('failed', 'Stripe Link express create intent request failed.');
+            csStripeErrorLog([$response, 'trace_id' => $traceId, 'order_id' => $order->get_id()], 'Stripe Link create-intent request error');
+            wp_send_json_error(['message' => 'We cannot process your payment right now, please try another payment method.'], 500);
+        }
+
+        $body = json_decode(wp_remote_retrieve_body($response));
+        if (empty($body) || ($body->status ?? '') !== 'success' || empty($body->client_secret) || empty($body->payment_intent_id)) {
+            $message = isset($body->message) ? (string) $body->message : 'Stripe Link express create intent failed.';
+            $order->update_status('failed', $message);
+            csStripeErrorLog([$body, 'trace_id' => $traceId, 'order_id' => $order->get_id()], 'Stripe Link create-intent error');
+            wp_send_json_error(['message' => 'We cannot process your payment right now, please try another payment method.'], 400);
+        }
+
+        csStripeSaveTransactionId($order, $body->payment_intent_id);
+        $order->add_order_note(sprintf(__('Stripe Link express Payment Intent created by proxy %s, Payment Intent ID: %s', 'wootify'), $activatedProxy['url'], $body->payment_intent_id), 0, false);
+        $order->save();
+
+        wp_send_json_success([
+            'order_id' => $order->get_id(),
+            'attempt_token' => $attemptToken,
+            'payment_intent_id' => $body->payment_intent_id,
+            'client_secret' => $body->client_secret,
+        ]);
+    } catch (Throwable $e) {
+        csStripeErrorLog($e->getMessage(), 'Stripe Link express order creation exception');
+        wp_send_json_error(['message' => 'We cannot process your payment right now, please try another payment method.'], 500);
     }
 }
 
@@ -762,6 +952,7 @@ function WOOTIFY_add_gateway_stripe_init() {
              */
             public static $log_enabled = false;
             public static $WOOTIFY_stripe_is_inited = false;
+            private static $link_express_rendered = false;
 
             /**
              * Logger instance
@@ -823,6 +1014,9 @@ function WOOTIFY_add_gateway_stripe_init() {
                 }
                 add_action('admin_enqueue_scripts', array($this, 'admin_scripts'));
                 add_action('wp_enqueue_scripts', array($this, 'payment_scripts'));
+                add_action('woocommerce_before_checkout_form', [$this, 'render_link_express_checkout'], 5);
+                add_action('woocommerce_checkout_before_customer_details', [$this, 'render_link_express_checkout'], 5);
+                add_action('wp_footer', [$this, 'render_link_express_checkout_fallback'], 20);
 
                 // process admin CardsShield Gateway Stripe
                 add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
@@ -921,6 +1115,14 @@ function WOOTIFY_add_gateway_stripe_init() {
                         'desc_tip' => true,
                         'required' => true,
                     ),
+                    OPT_WOOTIFY_STRIPE_LINK_EXPRESS_ENABLED => array(
+                        'title' => 'Enable Stripe Link Express Checkout',
+                        'label' => 'Show Pay with Link before the checkout form when Stripe reports Link is available.',
+                        'type' => 'checkbox',
+                        'description' => 'Only Link is enabled in v1. Apple Pay and Google Pay remain disabled.',
+                        'default' => 'no',
+                        'desc_tip' => false,
+                    ),
                     'config_proxies_button' => [
                         'id' => 'config_proxies_button',
                         'type' => 'config_proxies_button',
@@ -984,6 +1186,154 @@ function WOOTIFY_add_gateway_stripe_init() {
                     ),
                     true
                 );
+            }
+
+            public function render_link_express_checkout() {
+                if (self::$link_express_rendered) {
+                    return;
+                }
+
+                $html = $this->get_link_express_checkout_html();
+                if ($html === '') {
+                    return;
+                }
+
+                self::$link_express_rendered = true;
+                echo $html;
+            }
+
+            public function render_link_express_checkout_fallback() {
+                if (self::$link_express_rendered) {
+                    return;
+                }
+
+                $html = $this->get_link_express_checkout_html();
+                if ($html === '') {
+                    return;
+                }
+
+                $encodedHtml = wp_json_encode($html);
+                if (!$encodedHtml) {
+                    return;
+                }
+                ?>
+                <script>
+                    (function () {
+                        var html = <?php echo $encodedHtml; ?>;
+                        var attempts = 0;
+
+                        function insertStripeLinkExpress() {
+                            if (document.getElementById("wootify-stripe-link-express-container")) {
+                                return true;
+                            }
+
+                            var wrapper = document.createElement("div");
+                            wrapper.innerHTML = html;
+                            var block = wrapper.firstElementChild;
+                            if (!block) {
+                                return true;
+                            }
+
+                            var target = document.querySelector(".starterkit-checkout__payment, .woocommerce-checkout-payment, #payment");
+                            if (target && target.parentNode) {
+                                target.parentNode.insertBefore(block, target);
+                                return true;
+                            }
+
+                            var form = document.querySelector("form.checkout, form.woocommerce-checkout");
+                            if (form) {
+                                form.insertBefore(block, form.firstChild);
+                                return true;
+                            }
+
+                            var container = document.querySelector(".woocommerce");
+                            if (container) {
+                                container.appendChild(block);
+                                return true;
+                            }
+
+                            return false;
+                        }
+
+                        function retryInsert() {
+                            if (insertStripeLinkExpress() || attempts >= 20) {
+                                return;
+                            }
+                            attempts += 1;
+                            window.setTimeout(retryInsert, 250);
+                        }
+
+                        if (document.readyState === "loading") {
+                            document.addEventListener("DOMContentLoaded", retryInsert);
+                        } else {
+                            retryInsert();
+                        }
+                    })();
+                </script>
+                <?php
+            }
+
+            private function get_link_express_checkout_html() {
+                $gateway = $this->get_link_express_gateway();
+                if (!$gateway) {
+                    return '';
+                }
+                if (!is_checkout() || isset($_GET['pay_for_order'])) {
+                    return '';
+                }
+                if ($gateway->enabled !== 'yes' || $gateway->get_option(OPT_WOOTIFY_STRIPE_LINK_EXPRESS_ENABLED, 'no') !== 'yes') {
+                    return '';
+                }
+                if (!function_exists('WC') || !WC()->cart || WC()->cart->is_empty()) {
+                    return '';
+                }
+
+                findAndSetNextProxy();
+                $nextProxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
+                $nextProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+                if (!$nextProxyUrl || !$nextProxyId) {
+                    return '';
+                }
+
+                $amount = $gateway->get_stripe_amount(WC()->cart->get_total(false), get_woocommerce_currency());
+                if ($amount <= 0) {
+                    return '';
+                }
+                $params = [
+                    'wootify-stripe-link-express-form' => 1,
+                    'amount' => $amount,
+                    'currency' => get_woocommerce_currency(),
+                    'parent_origin' => home_url(),
+                ];
+                $iframeUrl = $nextProxyUrl . '?' . http_build_query($params);
+                ob_start();
+                ?>
+                <div id="wootify-stripe-link-express-container" class="cs-stripe-link-express" style="display:none">
+                    <div id="stripe-link-express-text">Express Checkout</div>
+                    <iframe id="payment-stripe-link-area"
+                            referrerpolicy="no-referrer"
+                            allow="payment *"
+                            src="<?= esc_url($iframeUrl) ?>"
+                            height="52"
+                            frameborder="0"
+                            style="width: 100%; border: 0"></iframe>
+                    <div id="stripe-link-express-or-text" style="text-align:center">- OR -</div>
+                    <div id="WOOTIFY_stripe_link_current_proxy_id" data-value="<?= esc_attr($nextProxyId) ?>" style="display:none"></div>
+                    <div id="WOOTIFY_stripe_link_current_proxy_url" data-value="<?= esc_attr($nextProxyUrl) ?>" style="display:none"></div>
+                </div>
+                <?php
+                return ob_get_clean();
+            }
+
+            private function get_link_express_gateway() {
+                if (!function_exists('WC') || !WC()->payment_gateways()) {
+                    return null;
+                }
+
+                $gateways = WC()->payment_gateways()->payment_gateways();
+                return isset($gateways['WOOTIFY_stripe']) && $gateways['WOOTIFY_stripe'] instanceof WC_WOOTIFY_Gateway_Stripe
+                    ? $gateways['WOOTIFY_stripe']
+                    : null;
             }
 
             /**

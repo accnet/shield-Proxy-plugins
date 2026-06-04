@@ -189,8 +189,8 @@ class WC_WOOTIFY_Gateway extends WC_Payment_Gateway {
             'user_define_product_title' => [
                 'title'       => 'User define title',
                 'type'        => 'text',
-                'description' => 'This will be appeared on PayPal transaction as product title, when overwrite product title is "User define" <br/> You can define title with <b>[order_id]</b> or <b>[last_word]</b>  and <b>[rand_N]</b> (random a N length string, N is a number > 1 ) shortcode. <br/>For example: Order #[order_id] or [rand_10] product or [last_word] product.',
-                'default'     => '[order_id] [rand_12] item',
+                'description' => 'This appears on the PayPal transaction as product title when overwrite product title is "User define". Supported shortcodes: <b>[order_id]</b>, <b>[last_word]</b>, <b>[variants]</b>, <b>[rand_N]</b>, <b>[str:N]</b>, <b>[random:A|B]</b>, <b>[by_price:20-30=Tshirt|31-50=Hoodie]</b>.',
+                'default'     => '[order_id] [str:12] item',
             ],
             'config_proxies_button'     => [
                 'id'    => 'config_proxies_button',
@@ -974,26 +974,10 @@ class WC_WOOTIFY_Gateway extends WC_Payment_Gateway {
     }
 
     public function getProductTitle( $productTitle , $orderId) {
-        switch ( $this->productTitleSetting ) {
-            case 'user_define':
-                $title = $this->userDefineProductTitle;
-                $title = str_replace('[order_id]', strval($orderId), $title);
-                $title = str_replace('[last_word]', strrchr( $productTitle, ' ' ), $title);
-                preg_match_all('/\[rand_\d+\]/', $title, $matchRandStrings);
-                if (is_array($matchRandStrings) && count($matchRandStrings)) {
-                    foreach ($matchRandStrings[0] as $matchRandString) {
-                        $numberOfStringRand = preg_replace('/[^0-9]/', '', $matchRandString);
-                        $stringRandom = $this->generateRandomString((int)$numberOfStringRand);
-                        $title = str_replace($matchRandString, $stringRandom, $title);
-                    }
-                }
-                return $title;
-            case 'keep_original':
-                return $productTitle;
-            case 'last_word':
-            default:
-                return strrchr( $productTitle, ' ' );
-        }
+        return cs_pp_resolve_product_title($productTitle, $orderId, null, [
+            'product_title_setting' => $this->productTitleSetting,
+            'user_define_product_title' => $this->userDefineProductTitle,
+        ]);
     }
     
     public function generateRandomString($length = 10) {
@@ -1371,4 +1355,3 @@ class WC_WOOTIFY_Gateway extends WC_Payment_Gateway {
         return true;
     }
 }
-

@@ -132,7 +132,7 @@ class ItemFactory {
 		$price_without_tax         = (float) $order->get_item_subtotal($item, false);
 		$price_without_tax_rounded = round($price_without_tax, 2);
 		return new Item(
-			mb_substr($this->getProductTitle($product->get_title(), $order->get_id()), 0, 127),
+			mb_substr($this->getProductTitle($product instanceof WC_Product ? $product->get_title() : $item->get_name(), $order->get_id(), $item), 0, 127),
 			new Money($price_without_tax_rounded, $currency),
 			$quantity,
 			substr(wp_strip_all_tags($product instanceof WC_Product ? $product->get_description() : ''), 0, 127) ?: '',
@@ -149,80 +149,8 @@ class ItemFactory {
 	 * @param $orderId
 	 * @return array|false|mixed|string|string[]
 	 */
-	private function getProductTitle($productTitle, $orderId) {
-		$wootifyPPSetting = get_option('woocommerce_wootify_paypal_settings', []);
-		if (empty($wootifyPPSetting)) {
-			$wootifyPPSetting = get_option('woocommerce_paypal_settings', []);
-		}
-		if (!isset($wootifyPPSetting['product_title_setting']) || $wootifyPPSetting['product_title_setting'] == 'keep_original') {
-			return $productTitle;
-		}
-
-		$title = $productTitle;
-		if ($wootifyPPSetting['product_title_setting'] == 'user_define') {
-			$title = $wootifyPPSetting['user_define_product_title'];
-			$pattern = '/\[(\w+)(?::([^\]]+))?\]/';
-			preg_match_all($pattern, $title, $matches, PREG_SET_ORDER);
-			$replacements = [];
-
-			foreach ($matches as $shortcodeMatch) {
-				$shortcode = $shortcodeMatch[0];
-				$key = $shortcodeMatch[1];
-				$values = $shortcodeMatch[2] ?? '';
-
-				switch ($key) {
-					case 'order_id':
-						$replacements[$shortcode] = strval($orderId);
-						break;
-					case 'variants':
-						$variants = [];
-						$item_meta = wc_get_order_item_meta($item->get_id(), '_WCPA_order_meta_data', true);
-						if (is_array($item_meta)) {
-							foreach ($item_meta as $meta) {
-								$variants[] = reset($meta['value'])['label'] ?? '';
-							}
-						}
-						$replacements[$shortcode] = implode(' - ', $variants);
-						break;
-					case 'random':
-						$values = explode('|', $values);
-						$random_index = array_rand($values);
-						$replacements[$shortcode] = $values[$random_index];
-						break;
-					case 'str':
-						$length = (int) $values;
-						$replacements[$shortcode] = $this->generateRandomString($length);
-						break;
-					case 'by_price':
-						$price = (float) $item->get_subtotal();
-						$conditions = explode('|', $values);
-						$name = '';
-						foreach ($conditions as $condition) {
-							$parts = explode('=', $condition);
-							if (count($parts) === 2) {
-								$priceRange = $parts[0];
-								$itemName = $parts[1];
-								list($priceMin, $priceMax) = array_map('floatval', explode('-', $priceRange));
-								if ($priceMin <= $price && $price < $priceMax) {
-									$name = $itemName;
-									break;
-								}
-							}
-						}
-						$replacements[$shortcode] = $name;
-						break;
-					case 'last_word':
-						$replacements[$shortcode] = strrchr($productTitle, ' ');
-						break;
-				}
-			}
-
-			$title = strtr($title, $replacements);
-		} else if ($wootifyPPSetting['product_title_setting'] == 'last_word') {
-			return strrchr($productTitle, ' ');
-		}
-
-		return $title;
+	private function getProductTitle($productTitle, $orderId, ?\WC_Order_Item_Product $item = null) {
+		return \cs_pp_resolve_product_title($productTitle, $orderId, $item);
 	}
 
 	/**
@@ -303,4 +231,3 @@ class ItemFactory {
 		);
 	}
 }
-

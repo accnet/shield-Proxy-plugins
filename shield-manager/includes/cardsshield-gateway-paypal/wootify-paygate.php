@@ -470,6 +470,121 @@ function cs_pp_build_proxy_url($baseUrl, $params) {
     return add_query_arg($params, $baseUrl);
 }
 
+function cs_pp_get_nested_value($source, $path, $default = '') {
+    $value = $source;
+    foreach ($path as $key) {
+        if (is_object($value) && isset($value->{$key})) {
+            $value = $value->{$key};
+            continue;
+        }
+        if (is_array($value) && isset($value[$key])) {
+            $value = $value[$key];
+            continue;
+        }
+        return $default;
+    }
+    return $value === null ? $default : $value;
+}
+
+function cs_pp_clean_checkout_value($value) {
+    if (is_array($value) || is_object($value)) {
+        return '';
+    }
+    return sanitize_text_field(wp_unslash((string) $value));
+}
+
+function cs_pp_get_checkout_post_value($key) {
+    if (isset($_POST[$key])) {
+        return cs_pp_clean_checkout_value($_POST[$key]);
+    }
+    return '';
+}
+
+function cs_pp_get_customer_value($type, $field) {
+    if (!function_exists('WC') || !WC()->customer) {
+        return '';
+    }
+
+    $method = 'get_' . $type . '_' . $field;
+    if (is_callable([WC()->customer, $method])) {
+        return cs_pp_clean_checkout_value(WC()->customer->{$method}());
+    }
+
+    return '';
+}
+
+function cs_pp_get_checkout_field($type, $field) {
+    $value = cs_pp_get_checkout_post_value($type . '_' . $field);
+    if ($value !== '') {
+        return $value;
+    }
+
+    return cs_pp_get_customer_value($type, $field);
+}
+
+function cs_pp_first_non_empty($values) {
+    foreach ($values as $value) {
+        $value = cs_pp_clean_checkout_value($value);
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return '';
+}
+
+function cs_pp_build_checkout_addresses($ppOrder) {
+    $payerCountry = cs_pp_get_nested_value($ppOrder, ['payer', 'address', 'country_code']);
+    $payerPhone = cs_pp_get_nested_value($ppOrder, ['payer', 'phone', 'phone_number', 'national_number']);
+    $paypalShipping = cs_pp_get_nested_value($ppOrder, ['purchase_units', 0, 'shipping'], null);
+
+    $paypalAddress = [
+        'first_name' => cs_pp_get_nested_value($paypalShipping, ['name', 'full_name']),
+        'address_1' => cs_pp_get_nested_value($paypalShipping, ['address', 'address_line_1']),
+        'address_2' => cs_pp_get_nested_value($paypalShipping, ['address', 'address_line_2']),
+        'city' => cs_pp_get_nested_value($paypalShipping, ['address', 'admin_area_2']),
+        'state' => cs_pp_get_nested_value($paypalShipping, ['address', 'admin_area_1']),
+        'postcode' => cs_pp_get_nested_value($paypalShipping, ['address', 'postal_code']),
+        'country' => cs_pp_get_nested_value($paypalShipping, ['address', 'country_code']),
+    ];
+
+    $payerFirstName = cs_pp_get_nested_value($ppOrder, ['payer', 'name', 'given_name']);
+    $payerLastName = cs_pp_get_nested_value($ppOrder, ['payer', 'name', 'surname']);
+    if ($paypalAddress['first_name'] !== '' && ($payerFirstName === '' || $payerLastName === '')) {
+        $nameParts = preg_split('/\s+/', trim($paypalAddress['first_name']), 2);
+        $payerFirstName = $payerFirstName !== '' ? $payerFirstName : ($nameParts[0] ?? '');
+        $payerLastName = $payerLastName !== '' ? $payerLastName : ($nameParts[1] ?? '');
+    }
+
+    $billing = [
+        'first_name' => cs_pp_first_non_empty([$payerFirstName, cs_pp_get_checkout_field('billing', 'first_name'), cs_pp_get_checkout_field('shipping', 'first_name')]),
+        'last_name' => cs_pp_first_non_empty([$payerLastName, cs_pp_get_checkout_field('billing', 'last_name'), cs_pp_get_checkout_field('shipping', 'last_name')]),
+        'email' => cs_pp_first_non_empty([cs_pp_get_nested_value($ppOrder, ['payer', 'email_address']), cs_pp_get_checkout_field('billing', 'email')]),
+        'address_1' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'address_1'), $paypalAddress['address_1'], cs_pp_get_checkout_field('shipping', 'address_1')]),
+        'address_2' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'address_2'), $paypalAddress['address_2'], cs_pp_get_checkout_field('shipping', 'address_2')]),
+        'city' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'city'), $paypalAddress['city'], cs_pp_get_checkout_field('shipping', 'city')]),
+        'state' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'state'), $paypalAddress['state'], cs_pp_get_checkout_field('shipping', 'state')]),
+        'postcode' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'postcode'), $paypalAddress['postcode'], cs_pp_get_checkout_field('shipping', 'postcode')]),
+        'country' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'country'), $paypalAddress['country'], cs_pp_get_checkout_field('shipping', 'country'), $payerCountry]),
+        'phone' => cs_pp_first_non_empty([$payerPhone, cs_pp_get_checkout_field('billing', 'phone')]),
+    ];
+
+    $shipping = [
+        'first_name' => cs_pp_first_non_empty([$payerFirstName, cs_pp_get_checkout_field('shipping', 'first_name'), $billing['first_name']]),
+        'last_name' => cs_pp_first_non_empty([$payerLastName, cs_pp_get_checkout_field('shipping', 'last_name'), $billing['last_name']]),
+        'address_1' => cs_pp_first_non_empty([$paypalAddress['address_1'], cs_pp_get_checkout_field('shipping', 'address_1'), $billing['address_1']]),
+        'address_2' => cs_pp_first_non_empty([$paypalAddress['address_2'], cs_pp_get_checkout_field('shipping', 'address_2'), $billing['address_2']]),
+        'city' => cs_pp_first_non_empty([$paypalAddress['city'], cs_pp_get_checkout_field('shipping', 'city'), $billing['city']]),
+        'state' => cs_pp_first_non_empty([$paypalAddress['state'], cs_pp_get_checkout_field('shipping', 'state'), $billing['state']]),
+        'postcode' => cs_pp_first_non_empty([$paypalAddress['postcode'], cs_pp_get_checkout_field('shipping', 'postcode'), $billing['postcode']]),
+        'country' => cs_pp_first_non_empty([$paypalAddress['country'], cs_pp_get_checkout_field('shipping', 'country'), $billing['country'], $payerCountry]),
+    ];
+
+    return [
+        'billing' => $billing,
+        'shipping' => $shipping,
+    ];
+}
+
 function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $currentProxyUrl) {
     // Get Order info from paypal to get ship + bill address
     $isEnableEndpointMode = isCsPaypalEnableEndpointMode();
@@ -505,25 +620,14 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         exit();
     }
     $ppOrder = $data->order;
-    $ppShipping = $ppOrder->purchase_units[0]->shipping;
-    $address = array(
-        'first_name' => $ppOrder->payer->name->given_name,
-        'last_name' => $ppOrder->payer->name->surname,
-        'email' => $ppOrder->payer->email_address,
-        'address_1' => $ppShipping->address->address_line_1 ?: '',
-        'address_2' => $ppShipping->address->address_line_2 ?: '',
-        'city' => $ppShipping->address->admin_area_2 ?: '',
-        'state' => $ppShipping->address->admin_area_1 ?: '',
-        'postcode' => $ppShipping->address->postal_code ?: '',
-        'country' => $ppShipping->address->country_code ?: '',
-        'phone' => isset($ppOrder->payer->phone->phone_number->national_number) ? $ppOrder->payer->phone->phone_number->national_number : ''
-    );
+    $addresses = cs_pp_build_checkout_addresses($ppOrder);
+    $address = $addresses['billing'];
     // Create new Order
     $checkout = WC()->checkout();
     $order_id = $checkout->create_order(array());
     $order = wc_get_order($order_id);
-    $order->set_address($address, 'billing');
-    $order->set_address($address, 'shipping');
+    $order->set_address($addresses['billing'], 'billing');
+    $order->set_address($addresses['shipping'], 'shipping');
     $payment_gateways = WC()->payment_gateways->payment_gateways();
     $order->set_payment_method($payment_gateways['WOOTIFY_paypal']);
     $order->set_created_via('paypal_express_checkout');
@@ -590,7 +694,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
     $orderData['pp_order_id'] = $ppOrderId;
     $orderData['customer_zipcode'] = $address['postcode'];
     $orderData['customer_email'] = $address['email'];
-    $orderData['shipping_address_country'] = $address['country'];
+    $orderData['shipping_address_country'] = $addresses['shipping']['country'];
     $orderData['bfp'] = WC()->session->get('wootify-paypal-browser-fingerprint');
     if ($wootifyPPGateway->intent == OPT_CS_PAYPAL_AUTHORIZE) {
         $urlCheckout = $getActivateProxyUrl . "?wootify-paypal-authorize-order=1"
@@ -1367,5 +1471,4 @@ function cs_paypal_plugin_activation() {
 function WOOTIFY_pp_remove_shipping_taxes(WC_Order_Item_Shipping $item) {
     $item->set_taxes(false);
 }
-
 

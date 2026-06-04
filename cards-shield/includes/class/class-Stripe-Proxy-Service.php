@@ -170,6 +170,107 @@ class Shield_Stripe_Proxy_Service {
         }
     }
 
+    public function createLinkExpressIntent(array $payload) {
+        $validationError = $this->validateLinkExpressPayload($payload);
+        if ($validationError) {
+            return $validationError;
+        }
+
+        $amountDecimal = (float) $payload['amount'];
+        $currency = strtolower((string) $payload['currency']);
+        $amountMinor = $this->normalizeAmountToMinor($amountDecimal, $currency);
+        $shipping = (isset($payload['shipping']) && is_array($payload['shipping'])) ? $payload['shipping'] : [];
+        $idempotencyKey = $this->buildIdempotencyKey([
+            'link',
+            (string) ($payload['order_id'] ?? ''),
+            (string) ($payload['confirmation_token'] ?? ''),
+            (string) ($payload['amount'] ?? ''),
+            $currency,
+        ]);
+
+        if (!Helpers::acquireIdempotencyLock('stripe_link_express_intent', $idempotencyKey, 900)) {
+            return $this->errorResponse(409, 'duplicate_request', 'Duplicate Link express request', 'duplicate_request');
+        }
+
+        try {
+            $createParams = [
+                'amount' => $amountMinor,
+                'currency' => $currency,
+                'capture_method' => (string) ($payload['capture_method'] ?? 'automatic') === 'manual' ? 'manual' : 'automatic',
+                'description' => (string) ($payload['statement_descriptor'] ?? ''),
+                'shipping' => $shipping,
+                'payment_method_types' => ['link', 'card'],
+                'metadata' => [
+                    'customer_email' => (string) ($payload['customer_email'] ?? ''),
+                    'customer_name' => (string) ($payload['name'] ?? ''),
+                    'order_id' => (string) ($payload['order_invoice'] ?? ''),
+                    'woo_order_id' => (string) ($payload['order_id'] ?? ''),
+                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                    'manager_id' => $this->managerId,
+                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'merchant_site' => home_url(),
+                    'funding_source' => 'link_express',
+                ],
+            ];
+
+            $paymentIntent = $this->stripe->paymentIntents->create($createParams, [
+                'idempotency_key' => substr(hash('sha256', $idempotencyKey), 0, 255),
+            ]);
+
+            Helpers::trackStripeWebhookPayment($paymentIntent->id, [
+                'mode' => $this->detectMode(),
+                'state' => isset($paymentIntent->status) ? (string) $paymentIntent->status : 'requires_payment_method',
+                'order_id' => (string) ($payload['order_id'] ?? ''),
+                'order_invoice' => (string) ($payload['order_invoice'] ?? ''),
+                'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'manager_id' => $this->managerId,
+                'proxy_id' => home_url(),
+                'trace_id' => $this->traceId,
+                'is_3ds_candidate' => true,
+                'last_source' => 'link_express_create_intent',
+            ]);
+
+            $this->queuePaymentTransitionLog([
+                'source' => 'link_express_create_intent',
+                'transactionId' => $paymentIntent->id,
+                'nextState' => (string) $paymentIntent->status,
+                'amount' => $amountDecimal,
+                'currency' => strtoupper($currency),
+                'orderId' => (string) ($payload['order_id'] ?? ''),
+                'orderNumber' => (string) ($payload['order_invoice'] ?? ''),
+                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'metadata' => [
+                    'amount' => $amountDecimal,
+                    'currency' => strtoupper($currency),
+                    'capture_method' => isset($paymentIntent->capture_method) ? (string) $paymentIntent->capture_method : '',
+                    'funding_source' => 'link_express',
+                ],
+            ]);
+
+            $this->log('info', 'Stripe Link express intent created', [
+                'payment_intent_id' => $paymentIntent->id,
+                'status' => $paymentIntent->status,
+                'amount_minor' => $amountMinor,
+                'currency' => $currency,
+            ]);
+
+            return $this->successResponse([
+                'code' => 'ok',
+                'message' => 'Link express payment intent created',
+                'status' => 'success',
+                'payment_intent' => $paymentIntent,
+                'payment_intent_id' => $paymentIntent->id,
+                'client_secret' => $paymentIntent->client_secret,
+                'charge' => [],
+            ]);
+        } catch (\Stripe\Exception\ApiErrorException $e) {
+            return $this->handleStripeException($e, 'Stripe Link express intent failed');
+        } catch (\Throwable $e) {
+            return $this->handleThrowable($e, 'Stripe Link express intent failed unexpectedly');
+        }
+    }
+
     public function confirmPayment(array $payload) {
         $paymentIntentId = sanitize_text_field((string) ($payload['payment_intent_id'] ?? ''));
         if ($paymentIntentId === '') {
@@ -417,6 +518,16 @@ class Shield_Stripe_Proxy_Service {
     private function validateMakePaymentPayload(array $payload) {
         if (empty($payload['amount']) || empty($payload['currency']) || empty($payload['payment_method_id'])) {
             return $this->errorResponse(400, 'invalid_payload', 'amount, currency, and payment_method_id are required', 'ERROR');
+        }
+        if ((float) $payload['amount'] <= 0) {
+            return $this->errorResponse(400, 'invalid_amount', 'amount must be greater than zero', 'ERROR');
+        }
+        return null;
+    }
+
+    private function validateLinkExpressPayload(array $payload) {
+        if (empty($payload['amount']) || empty($payload['currency']) || empty($payload['confirmation_token']) || empty($payload['order_id']) || empty($payload['shield_id'])) {
+            return $this->errorResponse(400, 'invalid_payload', 'amount, currency, confirmation_token, order_id, and shield_id are required', 'ERROR');
         }
         if ((float) $payload['amount'] <= 0) {
             return $this->errorResponse(400, 'invalid_amount', 'amount must be greater than zero', 'ERROR');

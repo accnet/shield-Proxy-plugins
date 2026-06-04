@@ -1,47 +1,47 @@
 <?php
 
-const OPT_WOOTIFY_PAYPAL_VERSION                     = '2.7.3';
-const OPT_WOOTIFY_PAYPAL_PROXIES                     = 'OPT_WOOTIFY_PAYPAL_PROXIES';
-const OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES              = 'OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES';
-const OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY             = 'OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY';
-const OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE      = 'OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE';
-const OPT_WOOTIFY_PAYPAL_ROTATION_METHOD             = 'OPT_WOOTIFY_PAYPAL_ROTATION_METHOD';
-const OPT_WOOTIFY_PAYPAL_CONNECTION_MODE            = 'OPT_WOOTIFY_PAYPAL_CONNECTION_MODE';
-const OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT = 'OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT';
+defined('OPT_WOOTIFY_PAYPAL_VERSION') || define('OPT_WOOTIFY_PAYPAL_VERSION', '2.7.3');
+defined('OPT_WOOTIFY_PAYPAL_PROXIES') || define('OPT_WOOTIFY_PAYPAL_PROXIES', 'OPT_WOOTIFY_PAYPAL_PROXIES');
+defined('OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES') || define('OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES', 'OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES');
+defined('OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY') || define('OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY', 'OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY');
+defined('OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE') || define('OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE', 'OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE');
+defined('OPT_WOOTIFY_PAYPAL_ROTATION_METHOD') || define('OPT_WOOTIFY_PAYPAL_ROTATION_METHOD', 'OPT_WOOTIFY_PAYPAL_ROTATION_METHOD');
+defined('OPT_WOOTIFY_PAYPAL_CONNECTION_MODE') || define('OPT_WOOTIFY_PAYPAL_CONNECTION_MODE', 'OPT_WOOTIFY_PAYPAL_CONNECTION_MODE');
+defined('OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT') || define('OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT', 'OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT');
 
-const METAKEY_PAYPAL_PROXY_URL          = '_WOOTIFY_paypal_proxy_url';
-const METAKEY_PAYPAL_PROXY_ID          = '_WOOTIFY_paypal_proxy_id';
-const METAKEY_PAYPAL_SYNC_TRACKING_INFO = '_WOOTIFY_paypal_sync_tracking_info';
-const METAKEY_PAYPAL_PROCESSING_ORDER_KEY = '_METAKEY_PAYPAL_PROCESSING_ORDER_KEY';
+defined('METAKEY_PAYPAL_PROXY_URL') || define('METAKEY_PAYPAL_PROXY_URL', '_WOOTIFY_paypal_proxy_url');
+defined('METAKEY_PAYPAL_PROXY_ID') || define('METAKEY_PAYPAL_PROXY_ID', '_WOOTIFY_paypal_proxy_id');
+defined('METAKEY_PAYPAL_SYNC_TRACKING_INFO') || define('METAKEY_PAYPAL_SYNC_TRACKING_INFO', '_WOOTIFY_paypal_sync_tracking_info');
+defined('METAKEY_PAYPAL_PROCESSING_ORDER_KEY') || define('METAKEY_PAYPAL_PROCESSING_ORDER_KEY', '_METAKEY_PAYPAL_PROCESSING_ORDER_KEY');
 
-const METAKEY_CS_PAYPAL_FEE    = '_cs_paypal_fee';
-const METAKEY_CS_PAYPAL_PAYOUT = '_cs_paypal_payout';
-const METAKEY_CS_PAYPAL_CURRENCY  = '_cs_paypal_currency';
-const METAKEY_CS_PAYPAL_INTENT  = '_cs_paypal_intent';
-const METAKEY_CS_PAYPAL_CAPTURED  = '_cs_paypal_captured';
+defined('METAKEY_CS_PAYPAL_FEE') || define('METAKEY_CS_PAYPAL_FEE', '_cs_paypal_fee');
+defined('METAKEY_CS_PAYPAL_PAYOUT') || define('METAKEY_CS_PAYPAL_PAYOUT', '_cs_paypal_payout');
+defined('METAKEY_CS_PAYPAL_CURRENCY') || define('METAKEY_CS_PAYPAL_CURRENCY', '_cs_paypal_currency');
+defined('METAKEY_CS_PAYPAL_INTENT') || define('METAKEY_CS_PAYPAL_INTENT', '_cs_paypal_intent');
+defined('METAKEY_CS_PAYPAL_CAPTURED') || define('METAKEY_CS_PAYPAL_CAPTURED', '_cs_paypal_captured');
 
-const OPT_CS_PAYPAL_NOT_SYNCED = 1;
-const OPT_CS_PAYPAL_SYNCED     = 2;
-const OPT_CS_PAYPAL_SYNC_ERROR = 99;
+defined('OPT_CS_PAYPAL_NOT_SYNCED') || define('OPT_CS_PAYPAL_NOT_SYNCED', 1);
+defined('OPT_CS_PAYPAL_SYNCED') || define('OPT_CS_PAYPAL_SYNCED', 2);
+defined('OPT_CS_PAYPAL_SYNC_ERROR') || define('OPT_CS_PAYPAL_SYNC_ERROR', 99);
 
-const OPT_CS_PAYPAL_BY_TIME   = "by_time";
-const OPT_CS_PAYPAL_BY_AMOUNT = "by_amount";
-const OPT_CS_PAYPAL_ENDPOINT_TOKEN = "OPT_CS_PAYPAL_ENDPOINT_TOKEN";
-const OPT_CS_PAYPAL_ENDPOINT_SECRET= "OPT_CS_PAYPAL_ENDPOINT_SECRET";
+defined('OPT_CS_PAYPAL_BY_TIME') || define('OPT_CS_PAYPAL_BY_TIME', 'by_time');
+defined('OPT_CS_PAYPAL_BY_AMOUNT') || define('OPT_CS_PAYPAL_BY_AMOUNT', 'by_amount');
+defined('OPT_CS_PAYPAL_ENDPOINT_TOKEN') || define('OPT_CS_PAYPAL_ENDPOINT_TOKEN', 'OPT_CS_PAYPAL_ENDPOINT_TOKEN');
+defined('OPT_CS_PAYPAL_ENDPOINT_SECRET') || define('OPT_CS_PAYPAL_ENDPOINT_SECRET', 'OPT_CS_PAYPAL_ENDPOINT_SECRET');
 
-const OPT_CS_PAYPAL_CONNECTION_MODE_SHIELD_DOMAINS   = "shield_domains";
-const OPT_CS_PAYPAL_CONNECTION_MODE_ENDPOINT_TOKEN = "endpoint_token";
+defined('OPT_CS_PAYPAL_CONNECTION_MODE_SHIELD_DOMAINS') || define('OPT_CS_PAYPAL_CONNECTION_MODE_SHIELD_DOMAINS', 'shield_domains');
+defined('OPT_CS_PAYPAL_CONNECTION_MODE_ENDPOINT_TOKEN') || define('OPT_CS_PAYPAL_CONNECTION_MODE_ENDPOINT_TOKEN', 'endpoint_token');
 
-const OPT_CS_PAYPAL_AUTHORIZE = "AUTHORIZE";
-const OPT_CS_PAYPAL_CAPTURE   = "CAPTURE";
+defined('OPT_CS_PAYPAL_AUTHORIZE') || define('OPT_CS_PAYPAL_AUTHORIZE', 'AUTHORIZE');
+defined('OPT_CS_PAYPAL_CAPTURE') || define('OPT_CS_PAYPAL_CAPTURE', 'CAPTURE');
 
-const OPT_CS_PAYPAL_SETTING_STANDARD = "PAYPAL_STANDARD";
-const OPT_CS_PAYPAL_SETTING_CHECKOUT   = "PAYPAL_CHECKOUT"; 
+defined('OPT_CS_PAYPAL_SETTING_STANDARD') || define('OPT_CS_PAYPAL_SETTING_STANDARD', 'PAYPAL_STANDARD');
+defined('OPT_CS_PAYPAL_SETTING_CHECKOUT') || define('OPT_CS_PAYPAL_SETTING_CHECKOUT', 'PAYPAL_CHECKOUT');
 
-const OPT_CS_TRACKING_SYNC_PLUGIN_ADVANCED_SHIPMENT_TRACKING='opt_cs_tracking_sync_plugin_advanced_shipment_tracking';
-const OPT_CS_TRACKING_SYNC_PLUGIN_ORDERS_TRACKING='opt_cs_tracking_sync_plugin_orders_tracking';
-const OPT_CS_TRACKING_SYNC_PLUGIN_DIANXIAOMI='opt_cs_tracking_sync_plugin_dianxiaomi';
-const OPT_CS_PAYMENT_GATEWAY_TYPE_PAYPAL = 1;
+defined('OPT_CS_TRACKING_SYNC_PLUGIN_ADVANCED_SHIPMENT_TRACKING') || define('OPT_CS_TRACKING_SYNC_PLUGIN_ADVANCED_SHIPMENT_TRACKING', 'opt_cs_tracking_sync_plugin_advanced_shipment_tracking');
+defined('OPT_CS_TRACKING_SYNC_PLUGIN_ORDERS_TRACKING') || define('OPT_CS_TRACKING_SYNC_PLUGIN_ORDERS_TRACKING', 'opt_cs_tracking_sync_plugin_orders_tracking');
+defined('OPT_CS_TRACKING_SYNC_PLUGIN_DIANXIAOMI') || define('OPT_CS_TRACKING_SYNC_PLUGIN_DIANXIAOMI', 'opt_cs_tracking_sync_plugin_dianxiaomi');
+defined('OPT_CS_PAYMENT_GATEWAY_TYPE_PAYPAL') || define('OPT_CS_PAYMENT_GATEWAY_TYPE_PAYPAL', 1);
 function logRotation($rotationMethod, $proxy, $type)
 {
     $WOOTIFY_log_dir = wp_get_upload_dir()["basedir"] . '/wootify';
@@ -108,6 +108,150 @@ function getLogFileName($rotationMethod) {
 
 function isEnabledAmountRotation() {
     return OPT_CS_PAYPAL_BY_AMOUNT === get_option(OPT_WOOTIFY_PAYPAL_ROTATION_METHOD, OPT_CS_PAYPAL_BY_TIME);
+}
+
+function cs_pp_get_gateway_settings() {
+    $settings = get_option('woocommerce_WOOTIFY_paypal_settings', []);
+    if (!empty($settings) && is_array($settings)) {
+        return $settings;
+    }
+
+    $settings = get_option('woocommerce_wootify_paypal_settings', []);
+    if (!empty($settings) && is_array($settings)) {
+        return $settings;
+    }
+
+    $settings = get_option('woocommerce_paypal_settings', []);
+    return is_array($settings) ? $settings : [];
+}
+
+function cs_pp_generate_random_string($length = 10) {
+    $length = max(1, (int) $length);
+    $characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    $charactersLength = strlen($characters);
+    $randomString = '';
+    for ($i = 0; $i < $length; $i++) {
+        $randomString .= $characters[random_int(0, $charactersLength - 1)];
+    }
+    return $randomString;
+}
+
+function cs_pp_get_product_last_word($productTitle) {
+    $productTitle = trim((string) $productTitle);
+    if ($productTitle === '') {
+        return '';
+    }
+
+    $parts = preg_split('/\s+/', $productTitle);
+    return $parts ? (string) end($parts) : $productTitle;
+}
+
+function cs_pp_get_order_item_variants($item = null) {
+    if (!$item || !is_object($item) || !method_exists($item, 'get_id')) {
+        return '';
+    }
+
+    $variants = [];
+    $wcpaMeta = wc_get_order_item_meta($item->get_id(), '_WCPA_order_meta_data', true);
+    if (is_array($wcpaMeta)) {
+        foreach ($wcpaMeta as $meta) {
+            if (!isset($meta['value'])) {
+                continue;
+            }
+            $value = $meta['value'];
+            if (is_array($value)) {
+                $first = reset($value);
+                if (is_array($first) && isset($first['label'])) {
+                    $variants[] = $first['label'];
+                } elseif (isset($meta['label'])) {
+                    $variants[] = $meta['label'];
+                }
+            } elseif (is_scalar($value)) {
+                $variants[] = (string) $value;
+            }
+        }
+    }
+
+    foreach ($item->get_meta_data() as $meta) {
+        $data = $meta->get_data();
+        $key = isset($data['key']) ? (string) $data['key'] : '';
+        $value = $data['value'] ?? '';
+        if ($key === '' || strpos($key, '_') === 0 || $key === '_WCPA_order_meta_data') {
+            continue;
+        }
+        if (is_scalar($value)) {
+            $variants[] = (string) $value;
+        }
+    }
+
+    $variants = array_values(array_filter(array_map('trim', $variants), 'strlen'));
+    return implode(' - ', array_unique($variants));
+}
+
+function cs_pp_resolve_product_title($productTitle, $orderId, $item = null, $settings = null) {
+    $settings = is_array($settings) ? $settings : cs_pp_get_gateway_settings();
+    $mode = $settings['product_title_setting'] ?? 'last_word';
+    $productTitle = trim(wp_strip_all_tags((string) $productTitle));
+
+    if ($mode === 'keep_original') {
+        return $productTitle;
+    }
+
+    if ($mode !== 'user_define') {
+        $lastWord = cs_pp_get_product_last_word($productTitle);
+        return $lastWord !== '' ? $lastWord : $productTitle;
+    }
+
+    $title = isset($settings['user_define_product_title']) ? (string) $settings['user_define_product_title'] : '';
+    if (trim($title) === '') {
+        return $productTitle;
+    }
+
+    $price = ($item && is_object($item) && method_exists($item, 'get_subtotal')) ? (float) $item->get_subtotal() : 0.0;
+    $replacements = [
+        '[order_id]' => (string) $orderId,
+        '[last_word]' => cs_pp_get_product_last_word($productTitle),
+        '[variants]' => cs_pp_get_order_item_variants($item),
+    ];
+
+    $title = strtr($title, $replacements);
+
+    $title = preg_replace_callback('/\[rand_(\d+)\]/', function ($matches) {
+        return cs_pp_generate_random_string((int) $matches[1]);
+    }, $title);
+
+    $title = preg_replace_callback('/\[str:(\d+)\]/', function ($matches) {
+        return cs_pp_generate_random_string((int) $matches[1]);
+    }, $title);
+
+    $title = preg_replace_callback('/\[random:([^\]]+)\]/', function ($matches) {
+        $values = array_values(array_filter(array_map('trim', explode('|', $matches[1])), 'strlen'));
+        if (empty($values)) {
+            return '';
+        }
+        return $values[array_rand($values)];
+    }, $title);
+
+    $title = preg_replace_callback('/\[by_price:([^\]]+)\]/', function ($matches) use ($price) {
+        $conditions = explode('|', $matches[1]);
+        foreach ($conditions as $condition) {
+            $parts = explode('=', $condition, 2);
+            if (count($parts) !== 2) {
+                continue;
+            }
+            $range = array_map('floatval', explode('-', $parts[0], 2));
+            if (count($range) !== 2) {
+                continue;
+            }
+            if ($range[0] <= $price && $price < $range[1]) {
+                return trim($parts[1]);
+            }
+        }
+        return '';
+    }, $title);
+
+    $title = trim(preg_replace('/\s+/', ' ', wp_strip_all_tags($title)));
+    return $title !== '' ? $title : $productTitle;
 }
 
 function resetPaidAmountIfNeed() {

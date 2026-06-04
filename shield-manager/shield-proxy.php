@@ -136,6 +136,8 @@ if (is_plugin_active(ECOM_PAYPAL_PLUGIN) || is_plugin_active(ECOM_STRIPE_PLUGIN)
   add_action('admin_notices', 'devvn_quickbuy_admin_notice__error');
 }
 else {
+  require_once(plugin_dir_path(__FILE__) . 'includes/constants.php');
+
   require_once(plugin_dir_path(__FILE__) . ECOM_PAYPAL_PATH);
   require_once(plugin_dir_path(__FILE__) . ECOM_STRIPE_PATH);
 
@@ -143,7 +145,6 @@ else {
     remove_action('admin_menu', 'add_WOOTIFY_paypal_paygate_menu');
   });
 
-  require_once(plugin_dir_path(__FILE__) . 'includes/constants.php');
   require_once(plugin_dir_path(__FILE__) . 'utils.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-shield-option-manager.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-site-registry.php');

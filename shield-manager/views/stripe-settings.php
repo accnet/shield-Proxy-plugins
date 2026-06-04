@@ -49,6 +49,14 @@ $form_fields = array(
     'desc_tip' => true,
     'required' => true,
   ),
+  OPT_WOOTIFY_STRIPE_LINK_EXPRESS_ENABLED => array(
+    'title' => 'Enable Stripe Link Express Checkout',
+    'label' => 'Show Pay with Link before the checkout form when Stripe reports Link is available.',
+    'type' => 'checkbox',
+    'description' => 'Only Link is enabled in v1. Apple Pay and Google Pay remain disabled.',
+    'default' => 'no',
+    'desc_tip' => false,
+  ),
   'card_icons' => array(
     'type' => 'multiselect',
     'title' => 'Accepted Payment Methods',
@@ -81,7 +89,7 @@ $groups = [
   ],
   'payment' => [
     'title'  => 'Payment Options',
-    'fields' => ['intent'],
+    'fields' => ['intent', OPT_WOOTIFY_STRIPE_LINK_EXPRESS_ENABLED],
   ],
   'appearance' => [
     'title'  => 'Appearance',
