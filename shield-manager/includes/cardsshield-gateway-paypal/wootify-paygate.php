@@ -599,6 +599,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         'order_id' => $ppOrderId,
     ]);
     $response = wp_remote_post($getOrderUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $getOrderUrl, [
+        '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 5 * 60,
         'headers' => [
@@ -708,6 +709,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
     ]);
     $proxyProcess = wp_remote_post($urlCheckout, shield_proxy_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
+        '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 300,
         'headers' => [
@@ -891,6 +893,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
         'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
     ]);
     $proxyProcess = wp_remote_post($urlCheckout, shield_proxy_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
+        '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 300,
         'headers' => [

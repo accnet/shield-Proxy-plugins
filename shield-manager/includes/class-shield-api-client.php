@@ -59,6 +59,17 @@ class Shield_API_Client {
         $parts = wp_parse_url((string)$url);
         $path = isset($parts['path']) ? $parts['path'] : '/';
         $query = isset($parts['query']) && $parts['query'] !== '' ? ('?' . $parts['query']) : '';
+
+        // WP REST verifies against WP_REST_Request::get_route(); public payment templates verify REQUEST_URI.
+        $rest_prefix = '/wp-json/shield';
+        if (strpos($path, $rest_prefix) === 0) {
+            $route_path = '/shield' . substr($path, strlen($rest_prefix));
+            if ($route_path === '/shield') {
+                $route_path = '/shield/';
+            }
+            return self::auth_headers($site, $method, $route_path, (string)$body_raw);
+        }
+
         return self::auth_headers($site, $method, $path . $query, (string)$body_raw);
     }
 
@@ -98,11 +109,13 @@ class Shield_API_Client {
         return self::parse_response($response);
     }
 
-    public static function bootstrap_v2($site, $bootstrap_token) {
+    public static function bootstrap_v2($site, $bootstrap_token, $credential = null) {
+        $source = is_array($credential) ? $credential : $site;
         $payload = [
-            'manager_id' => $site['manager_id'] ?? '',
-            'key_id' => $site['key_id'] ?? '',
-            'hmac_secret' => $site['hmac_secret'] ?? '',
+            'manager_id' => $source['manager_id'] ?? '',
+            'key_id' => $source['key_id'] ?? '',
+            'hmac_secret' => $source['hmac_secret'] ?? '',
+            'gateway' => $source['gateway'] ?? '',
             'label' => get_bloginfo('name'),
         ];
 

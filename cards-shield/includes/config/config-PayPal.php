@@ -7,7 +7,7 @@ $PAYPAL_CLIENT_SECRET = '';
 if (is_array($shield_paypal) && count($shield_paypal) > 0) {
   $test_mode = isset($shield_paypal['test_mode']) ? $shield_paypal['test_mode'] : false;
   $PAYPAL_ENVIRONMENT = $test_mode ? 'sandbox' : 'production';
-  $PAYPAL_ENDPOINTS = $test_mode ? 'https://api.sandbox.paypal.com' : 'https://api.paypal.com';
+  $PAYPAL_ENDPOINTS = $test_mode ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com';
   $PAYPAL_CLIENT_ID = $test_mode ? $shield_paypal['test_client_id'] : $shield_paypal['prod_client_id'];
   $PAYPAL_CLIENT_SECRET = $test_mode ? $shield_paypal['test_secret_key'] : $shield_paypal['prod_secret_key'];
 }

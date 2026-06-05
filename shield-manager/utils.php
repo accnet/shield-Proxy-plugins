@@ -224,7 +224,42 @@ function shield_proxy_signed_request_args($proxyOrUrl, $method, $url, $args = []
     return $args;
   }
 
+  if (!empty($site['hmac_disabled']) || (($site['auth_mode'] ?? '') === 'none')) {
+    return $args;
+  }
+
+  // Extract gateway from args (set by caller as '_shield_gateway') then remove it.
+  $gateway = '';
+  if (isset($args['_shield_gateway'])) {
+    $gateway = (string) $args['_shield_gateway'];
+    unset($args['_shield_gateway']);
+  }
+
   $headers = isset($args['headers']) && is_array($args['headers']) ? $args['headers'] : [];
+
+  // Prefer a real per-gateway credential. Fallback to the legacy derived sub-key
+  // only for proxies that have not been re-bootstrapped yet.
+  if ($gateway) {
+    $credential = class_exists('Shield_Site_Registry') ? Shield_Site_Registry::gateway_credential($site, $gateway) : null;
+    if (!empty($credential)) {
+      $gateway_site = array_merge($site, $credential);
+      $signed = Shield_API_Client::build_signed_headers_for_url($gateway_site, (string)$method, (string)$url, (string)$bodyRaw);
+      $signed['X-Shield-Gateway'] = $gateway;
+      $args['headers'] = array_merge($headers, $signed);
+      return $args;
+    }
+  }
+
+  if ($gateway && !empty($site['hmac_secret'])) {
+    $gateway_key = hash_hmac('sha256', 'gateway-proxy:' . $gateway, (string) $site['hmac_secret']);
+    $gateway_site = array_merge($site, ['hmac_secret' => $gateway_key]);
+    $signed = Shield_API_Client::build_signed_headers_for_url($gateway_site, (string)$method, (string)$url, (string)$bodyRaw);
+    $signed['X-Shield-Gateway'] = $gateway;
+    $args['headers'] = array_merge($headers, $signed);
+    return $args;
+  }
+
+  // Fallback: site-level HMAC (no gateway context).
   $signed = Shield_API_Client::build_signed_headers_for_url($site, (string)$method, (string)$url, (string)$bodyRaw);
   $args['headers'] = array_merge($headers, $signed);
   return $args;
@@ -286,11 +321,25 @@ function processProxyList($PG) {
   $proxyList = array_map(function ($proxy) use ($site_map) {
     $site_id = $proxy['site_id'] ?? '';
     if ($site_id && isset($site_map[$site_id])) {
-      $proxy['site_label']  = $site_map[$site_id]['label'];
-      $proxy['site_status'] = $site_map[$site_id]['status'];
+      $site = $site_map[$site_id];
+      $auth_none = !empty($site['hmac_disabled']) || (($site['auth_mode'] ?? '') === 'none');
+      $has_hmac = !empty($site['manager_id']) && !empty($site['key_id']) && !empty($site['hmac_secret']);
+      $bootstrap_status = (string) ($site['bootstrap_status'] ?? 'pending');
+
+      $proxy['site_label']  = $site['label'];
+      $proxy['site_status'] = $site['status'];
+      if ($auth_none) {
+        $proxy['hmac_status'] = 'not_required';
+        $proxy['hmac_label'] = 'No HMAC required';
+      } else {
+        $proxy['hmac_status'] = ($has_hmac && in_array($bootstrap_status, ['ok', 'ready'], true)) ? 'connected' : 'missing';
+        $proxy['hmac_label']  = $proxy['hmac_status'] === 'connected' ? 'HMAC connected' : 'HMAC not connected';
+      }
     } else {
       $proxy['site_label']  = '';
       $proxy['site_status'] = 'unknown';
+      $proxy['hmac_status'] = 'not_required';
+      $proxy['hmac_label']  = 'No HMAC required';
     }
     return $proxy;
   }, $proxyList);
@@ -369,5 +418,4 @@ function render_form($form_fields, $settings, $gateway = "paypal") {
 <?php
   }
 }
-
 

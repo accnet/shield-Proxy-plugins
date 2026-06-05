@@ -428,6 +428,7 @@ function handle_route() {
         ]);
         $traceId = csStripeGenerateTraceId();
         $response = wp_remote_get($confirmUrl, shield_proxy_signed_request_args($activatedProxy, 'GET', $confirmUrl, [
+            '_shield_gateway' => 'stripe',
             'sslverify' => false,
             'timeout' => 5 * 60,
             'headers' => [
@@ -660,6 +661,7 @@ function cs_stripe_handle_link_express_create_woo_order() {
         $traceId = csStripeGenerateTraceId();
         $payloadJson = wp_json_encode($payload);
         $response = wp_remote_post($createIntentUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $createIntentUrl, [
+            '_shield_gateway' => 'stripe',
             'sslverify' => false,
             'timeout' => 5 * 60,
             'headers' => [
@@ -1383,6 +1385,9 @@ function WOOTIFY_add_gateway_stripe_init() {
                     // display the description with <p> tags etc.
                     echo wpautop(wp_kses_post($this->description));
                 }
+                if (class_exists('Shield_Proxy_Failover')) {
+                    Shield_Proxy_Failover::ensure_stripe_checkout_proxy();
+                }
                 $loopCheckShield = 0;
                 $hasShield = false;
                 while (true) {
@@ -1396,6 +1401,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                     ]);
                     $traceId = csStripeGenerateTraceId();
                     $response = wp_remote_get($statusUrl, shield_proxy_signed_request_args($nextProxyUrl, 'GET', $statusUrl, [
+                        '_shield_gateway' => 'stripe',
                         'sslverify' => false,
                         'timeout' => 5 * 60,
                         'headers' => [
@@ -1496,7 +1502,9 @@ function WOOTIFY_add_gateway_stripe_init() {
                 wp_register_script('WOOTIFY_stripe_js', plugins_url('assets/js/checkout_hook.js', __FILE__), array('jquery'), OPT_WOOTIFY_STRIPE_VERSION, true);
                 wp_enqueue_script('WOOTIFY_stripe_js');
                 wp_localize_script('WOOTIFY_stripe_js', 'ajax_object', [
-                    'cs_add_order_note_nonce' => wp_create_nonce('cs_add_order_note')
+                    'ajax_url' => admin_url('admin-ajax.php'),
+                    'cs_add_order_note_nonce' => wp_create_nonce('cs_add_order_note'),
+                    'shield_proxy_frame_status_nonce' => wp_create_nonce('shield_proxy_frame_status'),
                 ]);
             }
 
@@ -1646,6 +1654,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 $traceId = csStripeGenerateTraceId();
                 $payloadJson = wp_json_encode($payload);
                 $response = wp_remote_post($makePaymentUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $makePaymentUrl, [
+                    '_shield_gateway' => 'stripe',
                     'sslverify' => false,
                     'timeout' => 5 * 60,
                     'headers' => [
@@ -1807,6 +1816,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 $payloadJson = wp_json_encode($payload);
 
                 $request = wp_remote_post($url, shield_proxy_signed_request_args($proxyUrl, 'POST', $url, [
+                    '_shield_gateway' => 'stripe',
                     'headers' => [
                         'Content-Type' => 'application/json',
                         'X-Shield-Trace-Id' => $traceId,

@@ -17,6 +17,65 @@ jQuery(function ($) {
         }, 1000)
     }
 
+    function scheduleStripeFrameWatch() {
+        var stripeIframe = $('#payment-stripe-area');
+        if (!stripeIframe.length || !isStripePaymentSelected()) {
+            return;
+        }
+
+        var iframeSrc = stripeIframe.attr('src') || '';
+        if (window.WOOTIFY_stripe_frame_watch_src === iframeSrc && window.loadedPaymentFormStripe) {
+            return;
+        }
+
+        window.WOOTIFY_stripe_frame_watch_src = iframeSrc;
+        window.loadedPaymentFormStripe = false;
+        if (window.WOOTIFY_stripe_frame_watch_timer) {
+            clearTimeout(window.WOOTIFY_stripe_frame_watch_timer);
+        }
+
+        window.WOOTIFY_stripe_frame_watch_timer = setTimeout(function () {
+            if (window.loadedPaymentFormStripe || !isStripePaymentSelected()) {
+                return;
+            }
+            reportStripeFrameFailure('frame_timeout');
+        }, 8000);
+    }
+
+    function reportStripeFrameFailure(reason) {
+        var ajaxConfig = window.ajax_object || {};
+        if (!ajaxConfig.ajax_url || !ajaxConfig.shield_proxy_frame_status_nonce) {
+            checkout_error('Payment form is not ready. Please refresh the page and try again.');
+            return;
+        }
+
+        $('.woocommerce-checkout-payment').block({
+            message: null,
+            overlayCSS: {
+                background: '#fff',
+                opacity: 0.6
+            }
+        });
+
+        $.post(ajaxConfig.ajax_url, {
+            action: 'shield_proxy_frame_status',
+            nonce: ajaxConfig.shield_proxy_frame_status_nonce,
+            gateway: 'stripe',
+            reason: reason || 'frame_timeout'
+        }).done(function (response) {
+            if (response && response.success && response.data && response.data.reload_checkout) {
+                $(document.body).trigger('update_checkout');
+                setTimeout(scheduleStripeFrameWatch, 1500);
+                return;
+            }
+            checkout_error('Payment form is not ready. Please try another payment method.');
+        }).fail(function () {
+            checkout_error('Payment form is not ready. Please try another payment method.');
+        }).always(function () {
+            $('.woocommerce-checkout-payment').unblock();
+        });
+    }
+
     $(document).on('checkout_error', function () {
         if ($('input[name="payment_method"]:checked').val() == 'WOOTIFY_stripe') {
             $('#cs-stripe-loader').hide();
@@ -105,7 +164,7 @@ jQuery(function ($) {
     if(WOOTIFY_checkout_form.find('[name="wootify-stripe-payment-method-id"]').length) {
             $(document.body).on('updated_checkout', function (data) {
             if (!window.loadedPaymentFormStripe && $('input[name="payment_method"]:checked').val() == 'WOOTIFY_stripe') {
-                $('.woocommerce-checkout-payment').block({
+            $('.woocommerce-checkout-payment').block({
                     message: null,
                     overlayCSS: {
                         background: '#fff',
@@ -113,6 +172,7 @@ jQuery(function ($) {
                     }
                 });
             }
+            scheduleStripeFrameWatch();
         });
     }
     /*
@@ -157,6 +217,9 @@ jQuery(function ($) {
         }
         if (event.data === 'wootify-loadedPaymentFormStripe') {
             window.loadedPaymentFormStripe = true;
+            if (window.WOOTIFY_stripe_frame_watch_timer) {
+                clearTimeout(window.WOOTIFY_stripe_frame_watch_timer);
+            }
             $('.woocommerce-checkout-payment').unblock();
         }
         if (event.data === 'wootify-paymentFormCompletedStripe') {
@@ -448,6 +511,10 @@ jQuery(function ($) {
     window.cs_confirm_iframe_ready = false;
     window.pending_confirm_secret = null;
     window.cs_stripe_3ds_attempt_token = null;
+    scheduleStripeFrameWatch();
+    $(document.body).on('updated_checkout', function () {
+        setTimeout(scheduleStripeFrameWatch, 500);
+    });
 
     function onHashChange() {
         var partials = window.location.hash.match(/^#?cs-confirm-pi-([^:]+):(.+):(.+)$/);
@@ -507,4 +574,3 @@ jQuery(function ($) {
         return null;
     }
 });
-

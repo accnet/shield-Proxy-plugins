@@ -36,13 +36,15 @@ function shield_hmac_v2_primary_manager_set($manager_id) {
   update_option('shield_hmac_v2_primary_manager_id', (string)$manager_id, false);
 }
 
-function shield_hmac_keys_v2_upsert($manager_id, $key_id, $secret, $label = '') {
+function shield_hmac_keys_v2_upsert($manager_id, $key_id, $secret, $label = '', $gateway = '') {
+  $gateway = in_array($gateway, array('paypal', 'stripe'), true) ? $gateway : '';
   $keys = shield_hmac_keys_v2_all();
   $found = false;
   foreach ($keys as &$item) {
     if (($item['manager_id'] ?? '') === $manager_id && ($item['key_id'] ?? '') === $key_id) {
       $item['hmac_secret'] = $secret;
       $item['label'] = $label;
+      $item['gateway'] = $gateway;
       $item['status'] = 'active';
       $item['updated_at'] = time();
       $found = true;
@@ -57,6 +59,7 @@ function shield_hmac_keys_v2_upsert($manager_id, $key_id, $secret, $label = '') 
       'key_id' => $key_id,
       'hmac_secret' => $secret,
       'label' => $label,
+      'gateway' => $gateway,
       'status' => 'active',
       'created_at' => time(),
       'updated_at' => time(),
@@ -146,6 +149,20 @@ function shield_verify_hmac_v2(WP_REST_Request $request) {
     return false;
   }
 
+  // New gateway-specific credentials are stored with their gateway and are used
+  // directly. Legacy site-level credentials derive a gateway sub-key.
+  $gateway       = sanitize_text_field($request->get_header('X-Shield-Gateway') ?? '');
+  $verify_secret = (string) $cred['hmac_secret'];
+  $cred_gateway  = sanitize_text_field($cred['gateway'] ?? '');
+  if ($gateway === 'paypal' || $gateway === 'stripe') {
+    if ($cred_gateway && $cred_gateway !== $gateway) {
+      return false;
+    }
+  }
+  if (($gateway === 'paypal' || $gateway === 'stripe') && !$cred_gateway) {
+    $verify_secret = hash_hmac('sha256', 'gateway-proxy:' . $gateway, $verify_secret);
+  }
+
   $canonical = implode("\n", [
     strtoupper($request->get_method()),
     (string) $request->get_route(),
@@ -156,7 +173,7 @@ function shield_verify_hmac_v2(WP_REST_Request $request) {
     $key_id,
   ]);
 
-  $expected = hash_hmac('sha256', $canonical, (string) $cred['hmac_secret']);
+  $expected = hash_hmac('sha256', $canonical, $verify_secret);
   return hash_equals($expected, (string) $signature);
 }
 
@@ -280,12 +297,13 @@ function shield_bootstrap_v2_callback(WP_REST_Request $request) {
   $key_id     = sanitize_text_field($body['key_id'] ?? '');
   $secret     = sanitize_text_field($body['hmac_secret'] ?? '');
   $label      = sanitize_text_field($body['label'] ?? '');
+  $gateway    = sanitize_text_field($body['gateway'] ?? '');
 
   if (!$manager_id || !$key_id || !$secret) {
     return new WP_REST_Response(array('message' => 'manager_id, key_id, hmac_secret are required'), 400);
   }
 
-  $keys = shield_hmac_keys_v2_upsert($manager_id, $key_id, $secret, $label);
+  $keys = shield_hmac_keys_v2_upsert($manager_id, $key_id, $secret, $label, $gateway);
 
   return new WP_REST_Response(array(
     'registered' => true,

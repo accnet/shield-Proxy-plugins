@@ -111,6 +111,23 @@ try {
     $trackersPayload = ['trackers' => $batch];
     $batchResult = $paypal->shipping($trackersPayload);
 
+    shield_sync_tracking_log('info', 'PayPal tracking batch API response', [
+      'correlation_id' => $traceId,
+      'manager_id' => $managerId,
+      'batch_index' => $index,
+      'http_status' => isset($batchResult['http_status']) ? $batchResult['http_status'] : null,
+      'api_success' => isset($batchResult['success']) ? $batchResult['success'] : null,
+      'has_tracker_identifiers' => isset($batchResult['order']['tracker_identifiers']),
+      'tracker_identifier_count' => isset($batchResult['order']['tracker_identifiers']) && is_array($batchResult['order']['tracker_identifiers'])
+        ? count($batchResult['order']['tracker_identifiers'])
+        : 0,
+      'has_errors' => isset($batchResult['order']['errors']),
+      'error_count' => isset($batchResult['order']['errors']) && is_array($batchResult['order']['errors'])
+        ? count($batchResult['order']['errors'])
+        : 0,
+      'raw' => $batchResult,
+    ]);
+
     $processableCount = count($batch);
     $errorMessage = null;
     $batchSuccess = true;
@@ -120,6 +137,25 @@ try {
     $trackerResults = [];
 
     $createdMap = [];
+    if (
+      (isset($batchResult['success']) && !$batchResult['success']) ||
+      (isset($batchResult['http_status']) && ((int) $batchResult['http_status'] < 200 || (int) $batchResult['http_status'] >= 300))
+    ) {
+      $processableCount = 0;
+      $batchSuccess = false;
+      if (isset($batchResult['order']['errors'][0]['name']) || isset($batchResult['order']['errors'][0]['message'])) {
+        $errorName = isset($batchResult['order']['errors'][0]['name']) ? $batchResult['order']['errors'][0]['name'] : 'PAYPAL_API_ERROR';
+        $errorText = isset($batchResult['order']['errors'][0]['message']) ? $batchResult['order']['errors'][0]['message'] : 'PayPal API request failed.';
+        $errorMessage = $errorName . ': ' . $errorText;
+      } elseif (isset($batchResult['error']['name']) || isset($batchResult['error']['message'])) {
+        $errorName = isset($batchResult['error']['name']) ? $batchResult['error']['name'] : 'PAYPAL_API_ERROR';
+        $errorText = isset($batchResult['error']['message']) ? $batchResult['error']['message'] : 'PayPal API request failed.';
+        $errorMessage = $errorName . ': ' . $errorText;
+      } else {
+        $errorMessage = 'PayPal API request failed';
+      }
+    }
+
     if (isset($batchResult['order']['tracker_identifiers']) && is_array($batchResult['order']['tracker_identifiers'])) {
       foreach ($batchResult['order']['tracker_identifiers'] as $ti) {
         if (isset($ti['transaction_id']) && isset($ti['tracking_number'])) {

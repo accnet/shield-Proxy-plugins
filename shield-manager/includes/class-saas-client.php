@@ -99,10 +99,41 @@ class Shield_SaaS_Client
         ];
     }
 
+    public static function pause_saas()
+    {
+        Shield_Option_Manager::delete('OPT_SHIELD_SAAS_CONNECTED');
+
+        return [
+            'success' => true,
+            'message' => 'SaaS sync is temporarily disabled. Existing rotation settings and credentials were kept.'
+        ];
+    }
+
+    public static function resume_saas()
+    {
+        $saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', '');
+        $connect_key = Shield_Option_Manager::get('OPT_SHIELD_SAAS_KEY', '');
+        $secret = Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', '');
+        if (empty($saas_url) || empty($connect_key) || empty($secret)) {
+            return [
+                'success' => false,
+                'message' => 'Saved SaaS credentials are missing. Reset and connect again.'
+            ];
+        }
+
+        Shield_Option_Manager::update('OPT_SHIELD_SAAS_CONNECTED', 'yes', true);
+        Shield_Option_Manager::update('OPT_SHIELD_SAAS_CONNECTED_AT', time(), true);
+
+        return [
+            'success' => true,
+            'message' => 'SaaS sync is active again. Existing synced rotation settings were kept.'
+        ];
+    }
+
     /**
-     * Terminate connection and clean up option tokens
+     * Clear connection credentials but keep local rotation/proxy options.
      */
-    public static function disconnect_saas()
+    public static function reset_saas_connection()
     {
         Shield_Option_Manager::delete('OPT_SHIELD_SAAS_CONNECTED');
         Shield_Option_Manager::delete('OPT_SHIELD_SAAS_URL');
@@ -112,8 +143,16 @@ class Shield_SaaS_Client
 
         return [
             'success' => true,
-            'message' => 'Disconnected from SaaS successfully. Rotation options are now unlocked locally.'
+            'message' => 'SaaS connection credentials were reset. Existing local rotation settings were kept.'
         ];
+    }
+
+    /**
+     * Backward-compatible alias for older callers.
+     */
+    public static function disconnect_saas()
+    {
+        return self::pause_saas();
     }
 
     /**

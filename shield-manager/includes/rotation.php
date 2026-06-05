@@ -179,8 +179,9 @@ function shield_find_registered_site_by_url($url)
   return null;
 }
 
-function shield_auto_connect_site_from_rotation($proxyUrl)
+function shield_auto_connect_site_from_rotation($proxyUrl, $gateway = '', $forceNewGatewayHmac = false)
 {
+  $gateway = strtolower((string)$gateway);
   $result = [
     'site_id' => '',
     'created' => false,
@@ -191,6 +192,36 @@ function shield_auto_connect_site_from_rotation($proxyUrl)
   $existing = shield_find_registered_site_by_url($proxyUrl);
   if ($existing) {
     $result['site_id'] = $existing['id'];
+    if ($gateway === 'paypal' || $gateway === 'stripe') {
+      $token = sanitize_text_field($existing['bootstrap_token'] ?? Shield_Option_Manager::get(OPT_SHIELD_DEFAULT_BOOTSTRAP_TOKEN, ''));
+      if (!$token) {
+        $result['warning'] = 'Existing site record has no bootstrap token.';
+        return $result;
+      }
+
+      $old_credential = Shield_Site_Registry::gateway_credential($existing, $gateway);
+      $credential = Shield_Site_Registry::ensure_gateway_credential($existing['id'], $gateway, (bool)$forceNewGatewayHmac);
+      if (!$credential) {
+        $result['warning'] = 'Failed to create gateway HMAC credential.';
+        return $result;
+      }
+
+      $site = Shield_Site_Registry::find($existing['id']);
+      $boot = Shield_API_Client::bootstrap_v2($site, $token, $credential);
+      Shield_Site_Registry::update($existing['id'], [
+        'bootstrap_status' => $boot['success'] ? 'ready' : 'failed',
+      ]);
+      if (!$boot['success']) {
+        $result['warning'] = $boot['error'] ?: 'Bootstrap failed';
+        return $result;
+      }
+
+      if ($forceNewGatewayHmac && !empty($old_credential['manager_id']) && !empty($old_credential['key_id'])) {
+        Shield_API_Client::revoke_v2(array_merge($site, $old_credential), $token);
+      }
+
+      $result['bootstrapped'] = true;
+    }
     return $result;
   }
 
@@ -207,7 +238,11 @@ function shield_auto_connect_site_from_rotation($proxyUrl)
     return $result;
   }
 
-  $boot = Shield_API_Client::bootstrap_v2($site, $token);
+  $credential = ($gateway === 'paypal' || $gateway === 'stripe')
+    ? Shield_Site_Registry::ensure_gateway_credential($site['id'], $gateway, true)
+    : null;
+  $site = Shield_Site_Registry::find($site['id']);
+  $boot = Shield_API_Client::bootstrap_v2($site, $token, $credential);
   Shield_Site_Registry::update($site['id'], [
     'bootstrap_status' => $boot['success'] ? 'ready' : 'failed',
   ]);
@@ -251,7 +286,8 @@ function add_new_proxy()
       }
     }
 
-    $connection = shield_auto_connect_site_from_rotation($proxyUrl);
+    $gateway = strtolower($PG) === 'paypal' ? 'paypal' : (strtolower($PG) === 'stripe' ? 'stripe' : '');
+    $connection = shield_auto_connect_site_from_rotation($proxyUrl, $gateway, true);
     $site_id = $connection['site_id'];
     $proxy = [
       'id'          => uniqid('px_', true),

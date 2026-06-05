@@ -44,6 +44,12 @@ class Shield_SaaS_Receiver
             'permission_callback' => '__return_true', // checked via signature in handler
         ]);
 
+        register_rest_route('shield-manager/v1', '/delete-gateway', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'handle_delete_gateway'],
+            'permission_callback' => '__return_true', // checked via signature in handler
+        ]);
+
         register_rest_route('shield-manager/v1', '/rotate-secret', [
             'methods'             => 'POST',
             'callback'            => [__CLASS__, 'handle_rotate_secret'],
@@ -395,6 +401,159 @@ class Shield_SaaS_Receiver
         ], 200);
     }
 
+    public static function handle_delete_gateway(WP_REST_Request $request)
+    {
+        $auth_error = self::verify_saas_request($request);
+        if ($auth_error !== null) {
+            return $auth_error;
+        }
+
+        $payload = json_decode($request->get_body(), true);
+        $type = sanitize_text_field($payload['type'] ?? '');
+        $shield_id = sanitize_text_field($payload['shieldId'] ?? '');
+        $shield_url = esc_url_raw($payload['url'] ?? '');
+        if (($type !== 'paypal' && $type !== 'stripe') || empty($shield_id)) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'invalid_payload',
+                'message' => 'type and shieldId are required',
+            ], 400);
+        }
+
+        $PG = ($type === 'stripe') ? 'Stripe' : 'PayPal';
+        if (!isset(OPTIONKEYS[$PG])) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'invalid_type',
+                'message' => 'Invalid gateway type',
+            ], 400);
+        }
+
+        $removed = self::remove_proxy_from_gateway($PG, $shield_id);
+        $site_cleanup = ['needed' => false, 'revoked' => false, 'deleted' => false];
+        $site_id = $removed['proxy']['site_id'] ?? '';
+        if (!$site_id && $shield_url && function_exists('shield_proxy_find_site_for_proxy')) {
+            $site = shield_proxy_find_site_for_proxy($shield_url);
+            $site_id = is_array($site) ? ($site['id'] ?? '') : '';
+        }
+        if ($site_id) {
+            $site = class_exists('Shield_Site_Registry') ? Shield_Site_Registry::find($site_id) : null;
+            if ($site) {
+                $site_cleanup['needed'] = true;
+                $token = sanitize_text_field($site['bootstrap_token'] ?? '');
+                if ($token && class_exists('Shield_API_Client')) {
+                    $credential = Shield_Site_Registry::gateway_credential($site, $type);
+                    $revoke_site = $credential ? array_merge($site, $credential) : $site;
+                    $revoke = Shield_API_Client::revoke_v2($revoke_site, $token);
+                    if (empty($revoke['success'])) {
+                        return new WP_REST_Response([
+                            'success' => false,
+                            'error' => 'site1_revoke_failed',
+                            'message' => $revoke['error'] ?? 'Failed to revoke site1 HMAC link',
+                        ], 502);
+                    }
+                    $site_cleanup['revoked'] = true;
+                }
+                Shield_Site_Registry::delete_gateway_credential($site_id, $type);
+                if (!self::site_is_referenced_by_any_proxy($site_id)) {
+                    $site_cleanup['deleted'] = (bool) Shield_Site_Registry::delete($site_id);
+                }
+            }
+        }
+
+        return new WP_REST_Response([
+            'success' => true,
+            'message' => 'Shield gateway deleted successfully',
+            'deleted' => [
+                'type' => $type,
+                'shieldId' => $shield_id,
+                'alreadyDeleted' => !$removed['found'],
+                'wasActive' => $removed['was_active'],
+            ],
+            'siteCleanup' => $site_cleanup,
+        ], 200);
+    }
+
+    private static function remove_proxy_from_gateway($PG, $shield_id)
+    {
+        $keys = OPTIONKEYS[$PG];
+        $proxies = Shield_Option_Manager::get($keys['proxies'], []);
+        $unused = Shield_Option_Manager::get($keys['unusedProxies'], []);
+        $position = Shield_Option_Manager::get($keys['positionList'], []);
+        $activated = Shield_Option_Manager::get($keys['activatedProxy'], null);
+
+        $found_proxy = null;
+        $was_active = is_array($activated) && (($activated['id'] ?? '') === $shield_id);
+
+        $filter = function ($proxy) use ($shield_id, &$found_proxy) {
+            if (is_array($proxy) && (($proxy['id'] ?? '') === $shield_id)) {
+                $found_proxy = $proxy;
+                return false;
+            }
+            return true;
+        };
+
+        $new_proxies = array_values(array_filter(is_array($proxies) ? $proxies : [], $filter));
+        $new_unused = array_values(array_filter(is_array($unused) ? $unused : [], $filter));
+
+        if (!$found_proxy) {
+            return ['found' => false, 'was_active' => false, 'proxy' => null];
+        }
+
+        $new_position = [];
+        foreach ((array) $position as $key => $value) {
+            if ((string) $key === $shield_id || (string) $value === $shield_id) {
+                continue;
+            }
+            $new_position[$key] = $value;
+        }
+
+        $new_activated = $activated;
+        if ($was_active) {
+            $new_activated = !empty($new_proxies) ? $new_proxies[0] : null;
+        }
+
+        Shield_Option_Manager::update($keys['proxies'], $new_proxies, true);
+        Shield_Option_Manager::update($keys['unusedProxies'], $new_unused, true);
+        Shield_Option_Manager::update($keys['positionList'], $new_position, true);
+        Shield_Option_Manager::update($keys['activatedProxy'], $new_activated, true);
+        Shield_Option_Manager::update($keys['currentRotation'], time(), true);
+
+        foreach ([ROTATION_METHOD_TIME, ROTATION_METHOD_AMOUNT, ROTATION_METHOD_ORDER] as $method) {
+            $prefix = shield_rotation_tab_storage_prefix($PG, $method);
+            Shield_Option_Manager::update($prefix . 'PROXIES', $new_proxies, true);
+            Shield_Option_Manager::update($prefix . 'UNUSED_PROXIES', $new_unused, true);
+            Shield_Option_Manager::update($prefix . 'POSITION_LIST', $new_position, true);
+            Shield_Option_Manager::update($prefix . 'ACTIVATED_PROXY', $new_activated, true);
+            Shield_Option_Manager::update($prefix . 'CURRENT_ROTATION', Shield_Option_Manager::get($keys['currentRotation'], time()), true);
+        }
+
+        return ['found' => true, 'was_active' => $was_active, 'proxy' => $found_proxy];
+    }
+
+    private static function site_is_referenced_by_any_proxy($site_id)
+    {
+        foreach (['PayPal', 'Stripe'] as $PG) {
+            if (!isset(OPTIONKEYS[$PG])) {
+                continue;
+            }
+            $keys = OPTIONKEYS[$PG];
+            $lists = [
+                Shield_Option_Manager::get($keys['proxies'], []),
+                Shield_Option_Manager::get($keys['unusedProxies'], []),
+            ];
+            foreach ($lists as $list) {
+                foreach ((array) $list as $proxy) {
+                    if (is_array($proxy) && (($proxy['site_id'] ?? '') === $site_id)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Handle incoming POST webhook sync request
      */
@@ -415,11 +574,20 @@ class Shield_SaaS_Receiver
             ], 400);
         }
 
-        self::sync_shields($payload);
+        $sync_result = self::sync_shields($payload);
+        if (!empty($payload['requireBootstrap']) && !empty($sync_result['warnings'])) {
+            return new WP_REST_Response([
+                'success' => false,
+                'error' => 'site1_bootstrap_failed',
+                'message' => 'One or more shield proxy sites failed HMAC bootstrap',
+                'warnings' => $sync_result['warnings'],
+            ], 502);
+        }
 
         return new WP_REST_Response([
             'success' => true,
-            'message' => 'Shield gateways synced successfully'
+            'message' => 'Shield gateways synced successfully',
+            'warnings' => $sync_result['warnings'] ?? [],
         ], 200);
     }
 
@@ -431,6 +599,15 @@ class Shield_SaaS_Receiver
         $shields = $payload['shields'] ?? [];
         $paypal_method = $payload['paypalRotationMethod'] ?? '';
         $stripe_method = $payload['stripeRotationMethod'] ?? '';
+        $warnings = [];
+        $force_bootstrap = [];
+        foreach (($payload['bootstrapTargets'] ?? []) as $target) {
+            $target_gateway = strtolower(sanitize_text_field($target['gateway'] ?? ''));
+            $target_shield_id = sanitize_text_field($target['shieldId'] ?? '');
+            if (($target_gateway === 'paypal' || $target_gateway === 'stripe') && $target_shield_id !== '') {
+                $force_bootstrap[$target_gateway . ':' . $target_shield_id] = true;
+            }
+        }
 
         $pgs = ['PayPal', 'Stripe'];
 
@@ -480,9 +657,18 @@ class Shield_SaaS_Receiver
                 $url = rtrim(!empty($shield[$domain_key]) ? $shield[$domain_key] : $shield['webDomain'], '/');
                 $norm_url = strtolower($url);
 
-                // Auto connect/register proxy site if it doesn't exist
-                $connection = shield_auto_connect_site_from_rotation($url);
+                // Auto connect/register proxy site and ensure a gateway-specific HMAC.
+                $force_new_hmac = !empty($force_bootstrap[$shield_gateway . ':' . $shield_id]);
+                $connection = shield_auto_connect_site_from_rotation($url, $shield_gateway, $force_new_hmac);
                 $site_id = $connection['site_id'];
+                if (!empty($connection['warning'])) {
+                    $warnings[] = [
+                        'gateway' => strtolower($PG),
+                        'shieldId' => $shield_id,
+                        'url' => $url,
+                        'message' => $connection['warning'],
+                    ];
+                }
 
                 // SaaS is authoritative for progress counters when present.
                 $paid_amount = isset($shield['paidAmount']) ? (float)$shield['paidAmount'] : 0;
@@ -505,7 +691,7 @@ class Shield_SaaS_Receiver
                     'timestamp'   => isset($shield['rotationTimeLimit']) ? (int)$shield['rotationTimeLimit'] : 0,
                     'amount'      => isset($shield['rotationAmountLimit']) ? (float)$shield['rotationAmountLimit'] : 0.0,
                     'order'       => isset($shield['rotationOrderLimit']) ? (int)$shield['rotationOrderLimit'] : 0,
-                    'proxyToken'  => $shield['shieldKey'] ?? '',
+                    // proxyToken (SaaS-derived shieldKey) removed — payment auth uses HMAC V2 per-gateway directly.
                     'sort_order'  => ($PG === 'Stripe') ? (int)($shield['stripeRotationOrder'] ?? 0) : (int)($shield['rotationOrder'] ?? 0),
                 ];
 
@@ -559,5 +745,7 @@ class Shield_SaaS_Receiver
                 Shield_Option_Manager::update($prefix . 'CURRENT_ROTATION', Shield_Option_Manager::get($keys['currentRotation'], time()), true);
             }
         }
+
+        return ['warnings' => $warnings];
     }
 }

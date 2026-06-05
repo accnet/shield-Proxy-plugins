@@ -98,6 +98,36 @@ add_action('wp_ajax_cards_shield_saas_disconnect', function () {
     wp_send_json_error(array('message' => 'Invalid security token'), 403);
   }
 
-  $result = Shield_SaaS_Client::disconnect_saas();
+  $result = Shield_SaaS_Client::pause_saas();
+  wp_send_json_success($result);
+});
+
+add_action('wp_ajax_cards_shield_saas_resume', function () {
+  if (!current_user_can('manage_options')) {
+    wp_send_json_error(array('message' => 'Unauthorized'), 403);
+  }
+
+  if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cards_shield_settings_nonce')) {
+    wp_send_json_error(array('message' => 'Invalid security token'), 403);
+  }
+
+  $result = Shield_SaaS_Client::resume_saas();
+  if ($result['success']) {
+    wp_send_json_success($result);
+  } else {
+    wp_send_json_error($result);
+  }
+});
+
+add_action('wp_ajax_cards_shield_saas_reset', function () {
+  if (!current_user_can('manage_options')) {
+    wp_send_json_error(array('message' => 'Unauthorized'), 403);
+  }
+
+  if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'cards_shield_settings_nonce')) {
+    wp_send_json_error(array('message' => 'Invalid security token'), 403);
+  }
+
+  $result = Shield_SaaS_Client::reset_saas_connection();
   wp_send_json_success($result);
 });

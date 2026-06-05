@@ -200,36 +200,84 @@ jQuery(document).ready(function ($) {
     });
   });
 
-  // SaaS Disconnect Button
-  $(document).on("click", "#saas-disconnect-btn", function () {
-    showConfirm("Are you sure you want to disconnect from SaaS? This will unlock local rotation configuration editing.").then(function (result) {
-      if (result.value) {
-        const disconnectBtn = $("#saas-disconnect-btn");
-        disconnectBtn.html(
-          `<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> DISCONNECTING...`
-        );
-        disconnectBtn.prop("disabled", true);
+  function postSaasAction(action, buttonSelector, loadingLabel, idleLabel, successFallback, errorFallback) {
+    const btn = $(buttonSelector);
+    btn.html(`<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> ${loadingLabel}`);
+    btn.prop("disabled", true);
 
-        const data = {
-          action: "cards_shield_saas_disconnect",
-          nonce: ShieldSettings.nonce,
-        };
+    const data = {
+      action: action,
+      nonce: ShieldSettings.nonce,
+    };
 
-        jQuery.post(cs_ajax_object.ajax_url, data, function (response) {
-          disconnectBtn.html(`Disconnect & Unlock Local Configuration`);
-          disconnectBtn.prop("disabled", false);
+    jQuery.post(cs_ajax_object.ajax_url, data, function (response) {
+      btn.html(idleLabel);
+      btn.prop("disabled", false);
 
-          if (response.success) {
-            showSuccess(response.data.message || "Disconnected from SaaS.").then(function () {
-              location.reload();
-            });
-          } else {
-            showError("Failed to disconnect from SaaS.");
-          }
+      if (response.success) {
+        showSuccess((response.data && response.data.message) || successFallback).then(function () {
+          location.reload();
         });
+      } else {
+        showError((response.data && response.data.message) || errorFallback);
+      }
+    });
+  }
+
+  function postSaasToggle(action, toggle, successFallback, errorFallback) {
+    const $toggle = $(toggle);
+    $toggle.prop("disabled", true);
+
+    jQuery.post(cs_ajax_object.ajax_url, {
+      action: action,
+      nonce: ShieldSettings.nonce,
+    }, function (response) {
+      $toggle.prop("disabled", false);
+      if (response.success) {
+        showSuccess((response.data && response.data.message) || successFallback).then(function () {
+          location.reload();
+        });
+      } else {
+        $toggle.prop("checked", !$toggle.prop("checked"));
+        showError((response.data && response.data.message) || errorFallback);
+      }
+    });
+  }
+
+  $(document).on("change", "#saas-sync-toggle", function () {
+    const toggle = this;
+    const turnOn = $(toggle).prop("checked");
+    const message = turnOn
+      ? "Activate SaaS sync again using the saved SaaS URL, connection key, and HMAC secret?"
+      : "Disable SaaS sync temporarily? Current SaaS URL, connection key, HMAC secret, and synced rotation settings will be kept.";
+
+    showConfirm(message).then(function (result) {
+      if (!result.value) {
+        $(toggle).prop("checked", !turnOn);
+        return;
+      }
+
+      postSaasToggle(
+        turnOn ? "cards_shield_saas_resume" : "cards_shield_saas_disconnect",
+        toggle,
+        turnOn ? "SaaS sync activated again." : "SaaS sync disabled temporarily.",
+        turnOn ? "Failed to activate SaaS sync." : "Failed to disable SaaS sync."
+      );
+    });
+  });
+
+  $(document).on("click", "#saas-reset-btn", function () {
+    showConfirm("Reset SaaS connection credentials? Existing local rotation/proxy settings will be kept, but the saved SaaS URL, connection key, and HMAC secret will be removed.").then(function (result) {
+      if (result.value) {
+        postSaasAction(
+          "cards_shield_saas_reset",
+          "#saas-reset-btn",
+          "RESETTING...",
+          "Reset Connection",
+          "SaaS connection reset.",
+          "Failed to reset SaaS connection."
+        );
       }
     });
   });
 });
-
-

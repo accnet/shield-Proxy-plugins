@@ -78,6 +78,12 @@
   input.is-invalid { border-color: #dc3545 !important; box-shadow: 0 0 0 .2rem rgba(220,53,69,.2); }
   input.is-invalid ~ .invalid-feedback { display: block; color: #dc3545; font-size: 12px; margin-top: 3px; }
   .invalid-feedback { display: none; }
+  .shield-url-stack { display: flex; flex-direction: column; gap: 5px; align-items: flex-start; }
+  .shield-url-badges { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .shield-hmac-badge { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; line-height: 1.2; }
+  .shield-hmac-connected { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+  .shield-hmac-missing { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+  .shield-hmac-not-required { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }
 </style>
 
 <?php
@@ -137,10 +143,21 @@ $is_saas_connected = (Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'n
           default    => 'bg-secondary',
         };
         ?>
-        <?php if ($site_label) : ?>
-          <span class="badge <?= $badge_cls ?>" title="<?= esc_attr($site_status) ?>"><?= esc_html($site_label) ?></span><br>
-        <?php endif; ?>
-        <small class="text-muted"><?= esc_html($proxy['url']) ?></small>
+        <?php
+        $hmac_status = $proxy['hmac_status'] ?? 'not_required';
+        $hmac_label  = $proxy['hmac_label'] ?? 'No HMAC required';
+        $hmac_cls    = match($hmac_status) {
+          'connected' => 'shield-hmac-connected',
+          'missing' => 'shield-hmac-missing',
+          default => 'shield-hmac-not-required',
+        };
+        ?>
+        <div class="shield-url-stack">
+          <div class="shield-url-badges">
+            <span class="shield-hmac-badge <?= esc_attr($hmac_cls) ?>" title="<?= esc_attr($hmac_status) ?>"><?= esc_html($hmac_label) ?></span>
+          </div>
+          <small class="text-muted"><?= esc_html($proxy['url']) ?></small>
+        </div>
       </td>
       <td class="order">
         <?= $proxy['order_count'] ?? 0 ?>

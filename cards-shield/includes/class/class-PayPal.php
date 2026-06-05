@@ -68,7 +68,7 @@ class PayPal extends PayPalHelper {
     $this->_http->resetHelper();
     $this->_setDefaultHeaders();
     $this->_setAPIVersion('1');
-    $this->_http->setUrl($this->_createApiUrl("shipping/trackers"));
+    $this->_http->setUrl($this->_createApiUrl("shipping/trackers-batch"));
     $this->_http->setBody($postData);
     return $this->_respond($this->_http->sendRequest());
   }

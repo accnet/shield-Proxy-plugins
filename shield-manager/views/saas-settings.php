@@ -14,6 +14,7 @@ $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
 $saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', 'http://172.19.0.1:3000');
 $connect_key = Shield_Option_Manager::get('OPT_SHIELD_SAAS_KEY', '');
 $connected_at = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED_AT', null);
+$has_saved_connection = !empty($saas_url) && !empty($connect_key) && !empty(Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', ''));
 ?>
 
 <div class="sp-card">
@@ -52,21 +53,45 @@ $connected_at = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED_AT', null)
       </div>
 
       <div class="sp-save-bar border-top pt-3 mt-4">
-        <button type="button" id="saas-disconnect-btn" class="btn btn-danger px-4" style="background-color: #dc2626; border: none; font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">
-          Disconnect & Unlock Local Configuration
+        <div class="form-check form-switch d-inline-flex align-items-center me-4" style="gap: 10px;">
+          <input class="form-check-input" type="checkbox" role="switch" id="saas-sync-toggle" checked style="width: 3rem; height: 1.5rem; cursor: pointer;">
+          <label class="form-check-label fw-bold" for="saas-sync-toggle" style="font-size: 13px; cursor: pointer;">
+            SaaS Sync Active
+          </label>
+        </div>
+        <button type="button" id="saas-reset-btn" class="btn btn-outline-danger px-4 ms-2" style="font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">
+          Reset Connection
         </button>
       </div>
 
     <?php else : ?>
-      <div class="alert alert-warning d-flex align-items-center gap-3 py-3" role="alert">
-        <span class="dashicons dashicons-warning" style="font-size: 28px; width: 28px; height: 28px; color: #b45309;"></span>
+      <div class="alert <?= $has_saved_connection ? 'alert-info' : 'alert-warning' ?> d-flex align-items-center gap-3 py-3" role="alert">
+        <span class="dashicons <?= $has_saved_connection ? 'dashicons-controls-pause' : 'dashicons-warning' ?>" style="font-size: 28px; width: 28px; height: 28px; color: <?= $has_saved_connection ? '#0369a1' : '#b45309' ?>;"></span>
         <div>
-          <h5 class="alert-heading mb-1 font-weight-bold" style="color: #92400e; font-size: 15px;">Local-Only Mode</h5>
-          <p class="mb-0 text-xs" style="color: #b45309; font-size: 13px;">
-            Connecting this plugin to the SaaS panel unlocks centralized remote rotation controls, allowing you to edit credentials and rotate multiple gateway configurations without manually logging into WooCommerce.
+          <h5 class="alert-heading mb-1 font-weight-bold" style="color: <?= $has_saved_connection ? '#075985' : '#92400e' ?>; font-size: 15px;">
+            <?= $has_saved_connection ? 'SaaS Sync Temporarily Disabled' : 'Local-Only Mode' ?>
+          </h5>
+          <p class="mb-0 text-xs" style="color: <?= $has_saved_connection ? '#0369a1' : '#b45309' ?>; font-size: 13px;">
+            <?= $has_saved_connection
+              ? 'Saved SaaS URL, connection key, HMAC secret, and synced rotation settings are preserved. Activate sync again when you are ready.'
+              : 'Connecting this plugin to the SaaS panel unlocks centralized remote rotation controls, allowing you to edit credentials and rotate multiple gateway configurations without manually logging into WooCommerce.' ?>
           </p>
         </div>
       </div>
+
+      <?php if ($has_saved_connection) : ?>
+        <div class="sp-save-bar border-top pt-3 mt-4 mb-4">
+          <div class="form-check form-switch d-inline-flex align-items-center me-4" style="gap: 10px;">
+            <input class="form-check-input" type="checkbox" role="switch" id="saas-sync-toggle" style="width: 3rem; height: 1.5rem; cursor: pointer;">
+            <label class="form-check-label fw-bold" for="saas-sync-toggle" style="font-size: 13px; cursor: pointer;">
+              SaaS Sync Disabled
+            </label>
+          </div>
+          <button type="button" id="saas-reset-btn" class="btn btn-outline-danger px-4 ms-2" style="font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 6px;">
+            Reset Connection
+          </button>
+        </div>
+      <?php endif; ?>
 
       <form id="saas-connect-form" class="mt-4">
         <div class="row mb-4">
@@ -87,7 +112,7 @@ $connected_at = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED_AT', null)
 
         <div class="sp-save-bar border-top pt-3 mt-4">
           <button type="submit" id="saas-connect-btn" class="btn btn-teal px-4" style="background-color: #0f766e; color: #fff; border: none; font-size: 13px; font-weight: 600; padding: 10px 24px; border-radius: 6px;">
-            Establish SaaS Connection
+            <?= $has_saved_connection ? 'Connect With New URL / Key' : 'Establish SaaS Connection' ?>
           </button>
         </div>
       </form>

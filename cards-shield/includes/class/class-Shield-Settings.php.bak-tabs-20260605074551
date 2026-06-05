@@ -520,23 +520,22 @@ class ShieldSettings {
         }
         ?>
         <style>
-        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
         .shield-dashboard {
-            font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            color: #334155;
-            margin: 20px 20px 20px 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+            color: #1e293b;
+            margin: 20px 20px 0 0;
             max-width: 1400px;
         }
         .shield-header {
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
-            padding: 20px 24px;
+            background: #0f172a;
+            border-radius: 12px;
+            padding: 24px 32px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 28px;
+            color: #fff;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            margin-bottom: 24px;
         }
         .shield-brand {
             display: flex;
@@ -544,63 +543,60 @@ class ShieldSettings {
             gap: 16px;
         }
         .shield-logo-icon {
-            background: #f0fdf4;
-            color: #10b981;
-            width: 40px;
-            height: 40px;
-            border-radius: 4px;
+            background: #10b981;
+            color: #fff;
+            width: 48px;
+            height: 48px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 20px;
-            border: 1px solid #d1fae5;
-            transition: transform 0.2s ease;
-        }
-        .shield-logo-icon:hover {
-            transform: scale(1.05);
+            font-size: 24px;
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
         }
         .shield-brand-title {
             margin: 0;
-            font-size: 20px;
-            font-weight: 700;
-            color: #0f172a;
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.025em;
+            background: linear-gradient(to right, #ffffff, #a7f3d0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
         .shield-brand-subtitle {
-            margin: 2px 0 0 0;
+            margin: 4px 0 0 0;
             font-size: 10px;
-            color: #64748b;
+            color: #94a3b8;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            font-weight: 600;
+            font-weight: 700;
         }
         .shield-connection-badge {
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
             letter-spacing: 0.05em;
-            padding: 6px 12px;
-            border-radius: 4px;
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            transition: all 0.2s ease;
+            padding: 8px 18px;
+            border-radius: 9999px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
         }
         .shield-connection-badge.connected {
-            background: #ecfdf5;
-            color: #047857;
-            border-color: #a7f3d0;
+            background: rgba(16, 185, 129, 0.15);
+            color: #34d399;
+            border-color: rgba(52, 211, 153, 0.25);
         }
         .shield-connection-badge.failed {
-            background: #fff1f2;
-            color: #be123c;
-            border-color: #fecdd3;
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border-color: rgba(248, 113, 113, 0.25);
         }
         .shield-connection-badge.pending {
-            background: #fffbeb;
-            color: #b45309;
-            border-color: #fef3c7;
+            background: rgba(245, 158, 11, 0.15);
+            color: #fbbf24;
+            border-color: rgba(251, 191, 36, 0.25);
         }
         .shield-connection-badge .dot {
             width: 6px;
@@ -609,7 +605,7 @@ class ShieldSettings {
         }
         .shield-connection-badge.connected .dot {
             background: #10b981;
-            box-shadow: 0 0 4px #10b981;
+            box-shadow: 0 0 8px #10b981;
             animation: shield-pulse 1.8s infinite;
         }
         .shield-connection-badge.failed .dot {
@@ -620,9 +616,9 @@ class ShieldSettings {
         }
 
         @keyframes shield-pulse {
-            0% { transform: scale(0.9); opacity: 0.7; }
-            50% { transform: scale(1.2); opacity: 1; }
-            100% { transform: scale(0.9); opacity: 0.7; }
+            0% { transform: scale(0.95); opacity: 0.6; }
+            50% { transform: scale(1.25); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.6; }
         }
 
         .shield-grid {
@@ -637,15 +633,16 @@ class ShieldSettings {
         }
 
         .shield-card {
-            background: #ffffff;
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05), 0 1px 2px -1px rgb(0 0 0 / 0.05);
             margin-bottom: 24px;
             overflow: hidden;
         }
         .shield-card-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid #cbd5e1;
+            padding: 18px 24px;
+            border-bottom: 1px solid #f1f5f9;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -661,7 +658,7 @@ class ShieldSettings {
             gap: 8px;
         }
         .shield-card-body {
-            padding: 20px 24px;
+            padding: 24px;
         }
 
         .shield-form-group {
@@ -675,9 +672,9 @@ class ShieldSettings {
             font-size: 11px;
             font-weight: 700;
             color: #475569;
-            margin-bottom: 8px;
+            margin-bottom: 6px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.025em;
         }
         .shield-input-wrapper {
             display: flex;
@@ -687,57 +684,55 @@ class ShieldSettings {
             flex: 1;
             height: 40px !important;
             border: 1px solid #cbd5e1 !important;
-            border-radius: 4px !important;
+            border-radius: 6px !important;
             padding: 0 12px !important;
             font-size: 13px !important;
-            font-family: 'JetBrains Mono', monospace !important;
-            color: #0f172a !important;
-            background: #ffffff !important;
-            transition: all 0.2s ease !important;
+            font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace !important;
+            color: #334155 !important;
+            background: #f8fafc !important;
             box-shadow: none !important;
         }
         .shield-input:focus {
-            border-color: #4f46e5 !important;
-            box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.1) !important;
+            border-color: #10b981 !important;
+            box-shadow: 0 0 0 1px #10b981 !important;
             outline: none !important;
+            background: #fff !important;
         }
         .shield-input-description {
-            margin: 8px 0 0 0;
-            font-size: 12px;
+            margin: 6px 0 0 0;
+            font-size: 11px;
             color: #64748b;
-            line-height: 1.5;
+            line-height: 1.4;
         }
 
         .shield-btn {
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 8px;
             height: 40px;
             padding: 0 20px;
-            border-radius: 4px;
+            border-radius: 6px;
             font-size: 13px;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.15s ease;
-            border: 1px solid transparent;
+            transition: all 0.2s;
+            border: none;
         }
         .shield-btn-primary {
-            background: #4f46e5;
-            color: #ffffff;
+            background: #10b981;
+            color: #fff;
+            box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
         }
         .shield-btn-primary:hover {
-            background: #4338ca;
-            color: #ffffff;
-        }
-        .shield-btn-primary:active {
-            background: #3730a3;
+            background: #059669;
+            color: #fff;
         }
         .shield-btn-primary:disabled {
-            background: #f1f5f9;
+            background: #cbd5e1;
             color: #94a3b8;
-            border-color: #e2e8f0;
             cursor: not-allowed;
+            box-shadow: none;
         }
 
         .shield-webhooks-grid {
@@ -751,20 +746,24 @@ class ShieldSettings {
             }
         }
         .webhook-item {
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
             overflow: hidden;
-            background: #f8fafc;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .webhook-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
         }
         .webhook-header {
-            padding: 12px 16px;
+            padding: 14px 18px;
             display: flex;
             justify-content: space-between;
             align-items: center;
             font-weight: 700;
             font-size: 11px;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.025em;
         }
         .webhook-header.test {
             background: #fffbeb;
@@ -777,36 +776,32 @@ class ShieldSettings {
             border-bottom: 1px solid #d1fae5;
         }
         .webhook-body {
-            padding: 16px;
+            padding: 18px;
+            background: #fff;
         }
         .webhook-badge {
             font-size: 9px;
             font-weight: 700;
             text-transform: uppercase;
-            padding: 3px 8px;
-            border-radius: 4px;
+            padding: 2px 8px;
+            border-radius: 9999px;
             letter-spacing: 0.05em;
-            border: 1px solid transparent;
         }
         .webhook-badge.enabled {
             background: #d1fae5;
             color: #065f46;
-            border-color: #a7f3d0;
         }
         .webhook-badge.disabled {
             background: #f1f5f9;
             color: #475569;
-            border-color: #e2e8f0;
         }
         .webhook-badge.failed {
             background: #fee2e2;
             color: #991b1b;
-            border-color: #fecdd3;
         }
         .webhook-badge.pending {
             background: #fef3c7;
             color: #92400e;
-            border-color: #fcd34d;
         }
 
         .shield-table-wrap {
@@ -815,61 +810,54 @@ class ShieldSettings {
         .shield-table {
             width: 100%;
             border-collapse: collapse;
-            font-size: 13px;
+            font-size: 12px;
             text-align: left;
         }
         .shield-table th {
             background: #f8fafc;
             padding: 12px 16px;
             font-weight: 700;
-            color: #475569;
-            border-bottom: 1px solid #cbd5e1;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
             text-transform: uppercase;
-            font-size: 10px;
+            font-size: 9px;
             letter-spacing: 0.05em;
         }
         .shield-table td {
             padding: 12px 16px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid #f1f5f9;
             color: #334155;
-            vertical-align: middle;
-        }
-        .shield-table tr:hover td {
-            background: #f8fafc;
-            color: #0f172a;
         }
         .shield-table tr:last-child td {
             border-bottom: none;
         }
         .shield-table code {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
             font-size: 11px;
             background: #f1f5f9;
-            padding: 3px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
-            color: #4f46e5;
-            border: 1px solid #e2e8f0;
+            color: #0f172a;
         }
         .shield-table-copy-btn {
-            background: #f1f5f9;
-            border: 1px solid #cbd5e1;
+            background: transparent;
+            border: none;
             cursor: pointer;
-            color: #475569;
-            padding: 4px 8px;
+            color: #64748b;
+            padding: 2px;
             border-radius: 4px;
-            transition: all 0.2s;
+            transition: background 0.2s;
             line-height: 1;
-            font-size: 12px;
         }
         .shield-table-copy-btn:hover {
-            background: #e2e8f0;
+            background: #f1f5f9;
             color: #0f172a;
         }
 
         .shield-cred-group {
             background: #f8fafc;
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
             padding: 16px;
             margin-bottom: 16px;
         }
@@ -878,11 +866,11 @@ class ShieldSettings {
         }
         .shield-cred-title {
             margin: 0 0 12px 0;
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 700;
             color: #475569;
             text-transform: uppercase;
-            letter-spacing: 0.05em;
+            letter-spacing: 0.025em;
             display: flex;
             align-items: center;
             gap: 6px;
@@ -896,240 +884,19 @@ class ShieldSettings {
         .meta-label-value {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 12px;
-            font-size: 12px;
-            align-items: center;
-            gap: 12px;
+            margin-bottom: 8px;
+            font-size: 11px;
         }
         .meta-label-value:last-child {
             margin-bottom: 0;
         }
         .meta-label {
-            font-weight: 500;
+            font-weight: 600;
             color: #64748b;
         }
         .meta-value {
-            font-family: 'JetBrains Mono', monospace;
+            font-family: monospace;
             color: #334155;
-            font-size: 12px;
-            word-break: break-all;
-            text-align: right;
-        }
-        .shield-tabs {
-            background: transparent;
-            border: none;
-            box-shadow: none;
-            overflow: visible;
-        }
-        .shield-tab-list {
-            display: flex;
-            gap: 24px;
-            padding: 0;
-            background: transparent;
-            border-bottom: 1px solid #cbd5e1;
-            overflow-x: auto;
-            margin-bottom: 28px;
-        }
-        .shield-tab-button {
-            appearance: none;
-            border: none;
-            background: transparent;
-            color: #64748b;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            line-height: 1;
-            padding: 0 0 16px 0;
-            white-space: nowrap;
-            transition: all 0.2s ease;
-            position: relative;
-            border-bottom: 2px solid transparent;
-            border-radius: 0;
-        }
-        .shield-tab-button:hover {
-            color: #0f172a;
-        }
-        .shield-tab-button.active {
-            color: #4f46e5;
-            border-bottom-color: #4f46e5;
-        }
-        .shield-tab-panel {
-            display: none;
-            padding: 0;
-        }
-        .shield-tab-panel.active {
-            display: block;
-            animation: fadeIn 0.3s ease;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(4px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .shield-tab-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-        }
-        @media (min-width: 1180px) {
-            .shield-tab-grid.two-column {
-                grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
-                align-items: start;
-            }
-        }
-        .shield-tab-section-title {
-            margin: 0 0 16px 0;
-            font-size: 13px;
-            font-weight: 800;
-            color: #334155;
-            text-transform: uppercase;
-            letter-spacing: .05em;
-        }
-        .shield-log-grid {
-            margin-top: 20px;
-        }
-        
-        .shield-conn-banner {
-            display: flex;
-            gap: 12px;
-            background: #ecfdf5;
-            border: 1px solid #a7f3d0;
-            padding: 16px;
-            border-radius: 4px;
-            margin-bottom: 24px;
-            font-size: 13px;
-            align-items: center;
-            color: #047857;
-        }
-        .shield-conn-banner code {
-            background: #ffffff;
-            color: #047857;
-            padding: 2px 6px;
-            border-radius: 4px;
-            border: 1px solid #a7f3d0;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .shield-card-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-top: 24px;
-            border-top: 1px solid #cbd5e1;
-            padding-top: 20px;
-        }
-        .shield-sync-time {
-            font-size: 12px;
-            color: #64748b;
-        }
-        .shield-sync-time strong {
-            color: #334155;
-        }
-        .shield-empty-state {
-            padding: 32px;
-            text-align: center;
-            color: #64748b;
-            font-size: 13px;
-        }
-        .shield-alert-warning {
-            margin-top: 16px;
-            background: #fffbeb;
-            border: 1px solid #fcd34d;
-            border-radius: 4px;
-            padding: 12px 16px;
-            color: #b45309;
-            font-size: 12px;
-            line-height: 1.5;
-        }
-        .shield-alert-warning strong {
-            color: #78350f;
-        }
-        .shield-alert-warning span {
-            color: #64748b;
-            font-size: 11px;
-        }
-        .shield-double-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-            gap: 20px;
-        }
-        
-        .webhook-field-label {
-            display: block;
-            font-size: 10px;
-            font-weight: 700;
-            color: #64748b;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-            letter-spacing: 0.05em;
-        }
-        .webhook-field-wrapper {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        .webhook-field-input {
-            flex: 1;
-            height: 32px !important;
-            font-size: 12px !important;
-            font-family: 'JetBrains Mono', monospace !important;
-            border: 1px solid #cbd5e1 !important;
-            border-radius: 4px !important;
-            background: #ffffff !important;
-            padding: 0 10px !important;
-            color: #334155 !important;
-        }
-        .webhook-field-input:focus {
-            border-color: #4f46e5 !important;
-            background: #ffffff !important;
-        }
-        .webhook-field-copy-btn {
-            height: 32px !important;
-            line-height: 30px !important;
-            background: #f1f5f9 !important;
-            border: 1px solid #cbd5e1 !important;
-            color: #475569 !important;
-            padding: 0 12px !important;
-            font-size: 12px !important;
-            font-weight: 600 !important;
-            border-radius: 4px !important;
-            cursor: pointer !important;
-            transition: all 0.2s !important;
-        }
-        .webhook-field-copy-btn:hover {
-            background: #e2e8f0 !important;
-            color: #0f172a !important;
-        }
-        .webhook-field-value {
-            font-size: 12px;
-            color: #334155;
-            word-break: break-all;
-            font-family: 'JetBrains Mono', monospace;
-        }
-        .webhook-field-value.error {
-            color: #be123c;
-            background: #fff1f2;
-            border: 1px solid #fecdd3;
-            padding: 6px 12px;
-            border-radius: 4px;
-        }
-        
-        .notice.notice-success,
-        div.updated {
-            background: #ecfdf5 !important;
-            border-left: 4px solid #10b981 !important;
-            color: #047857 !important;
-            border-radius: 4px !important;
-            padding: 12px 20px !important;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05) !important;
-            margin: 20px 20px 0 0 !important;
-            border-top: none !important;
-            border-right: none !important;
-            border-bottom: none !important;
-        }
-        .notice.notice-success p,
-        div.updated p {
-            margin: 0 !important;
-            font-size: 13px !important;
-            font-weight: 600 !important;
         }
         </style>
 
@@ -1149,15 +916,9 @@ class ShieldSettings {
                 </div>
             </div>
 
-            <div class="shield-tabs" data-shield-tabs>
-                <div class="shield-tab-list" role="tablist" aria-label="Cards Shield settings sections">
-                    <button type="button" class="shield-tab-button active" data-shield-tab="gateways" role="tab" aria-selected="true">Gateways Config</button>
-                    <button type="button" class="shield-tab-button" data-shield-tab="managers" role="tab" aria-selected="false">Connected Store Managers</button>
-                    <button type="button" class="shield-tab-button" data-shield-tab="transitions" role="tab" aria-selected="false">Transition Log</button>
-                </div>
-                <div class="shield-tab-panel active" data-shield-panel="gateways" role="tabpanel">
-                    <div class="shield-tab-grid two-column">
-                        <div>
+            <div class="shield-grid">
+                <!-- Left Column (Main Configs) -->
+                <div>
                     <!-- SaaS Connection Form -->
                     <div class="shield-card">
                         <div class="shield-card-header">
@@ -1165,11 +926,11 @@ class ShieldSettings {
                         </div>
                         <div class="shield-card-body">
                             <?php if ($conn_status === 'connected' && !empty($conn_data['shieldId'])) : ?>
-                                <div class="shield-conn-banner">
+                                <div style="display:flex;gap:12px;background:#f0fdf4;border:1px solid #bbf7d0;padding:12px 16px;border-radius:8px;margin-bottom:20px;font-size:12px;">
                                     <div>⚡</div>
                                     <div>
-                                        <span style="font-weight:700;">CONNECTED TO SHIELD SYSTEM</span>
-                                        <div style="margin-top:4px;">
+                                        <span style="color:#166534;font-weight:700;">CONNECTED TO SHIELD SYSTEM</span>
+                                        <div style="color:#1e293b;margin-top:2px;">
                                             ID: <code><?= esc_html($conn_data['shieldId']) ?></code> |
                                             Name: <strong><?= esc_html($conn_data['name'] ?? '') ?></strong>
                                         </div>
@@ -1189,8 +950,8 @@ class ShieldSettings {
                                 <p class="shield-input-description">API Key được cấp bởi SaaS Dashboard sau khi tạo Shield mới</p>
                             </div>
 
-                            <div class="shield-card-footer">
-                                <div class="shield-sync-time">
+                            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:24px;border-top:1px solid #f1f5f9;padding-top:20px;">
+                                <div style="font-size:11px;color:#64748b;">
                                     <?php if ($last_sync_at) : ?>
                                         Đồng bộ lần cuối: <strong><?= esc_html($last_sync_at) ?></strong> (<?= esc_html(strtoupper($last_sync_status)) ?>)
                                     <?php endif; ?>
@@ -1200,7 +961,7 @@ class ShieldSettings {
                                     Lưu & Kết nối
                                 </button>
                             </div>
-                            <div style="text-align:right;margin-top:12px;">
+                            <div style="text-align:right;margin-top:8px;">
                                 <span id="sp-connect-msg" style="font-size:12px;font-weight:600;"></span>
                             </div>
                         </div>
@@ -1220,8 +981,57 @@ class ShieldSettings {
                         </div>
                     </div>
 
+                    <!-- Connected stores (v2 keys) -->
+                    <div class="shield-card">
+                        <div class="shield-card-header">
+                            <h3 class="shield-card-title">🔐 Connected Store Managers (v2 keyrings)</h3>
                         </div>
-                        <div>
+                        <div class="shield-card-body" style="padding:0">
+                            <?php if (empty($v2_credentials)) : ?>
+                                <div style="padding:32px;text-align:center;color:#64748b;font-size:12px;">Chưa có WooCommerce store manager (site2.local) nào được bootstrap kết nối.</div>
+                            <?php else : ?>
+                                <div class="shield-table-wrap">
+                                    <table class="shield-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Store Label</th>
+                                                <th>Store ID</th>
+                                                <th>Key ID</th>
+                                                <th>HMAC Shared Secret</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($v2_credentials as $cred) : ?>
+                                                <tr>
+                                                    <td><strong><?= esc_html($cred['label'] ?: '(unlabeled)') ?></strong></td>
+                                                    <td><code><?= esc_html($cred['manager_id'] ?? '') ?></code></td>
+                                                    <td><code><?= esc_html($cred['key_id'] ?? '') ?></code></td>
+                                                    <td>
+                                                        <div style="display:flex;gap:6px;align-items:center;">
+                                                            <code><?= esc_html($mask_func($cred['hmac_secret'] ?? '')) ?></code>
+                                                            <?php if (!empty($cred['hmac_secret'])) : ?>
+                                                                <button class="shield-table-copy-btn" onclick="navigator.clipboard.writeText('<?= esc_js($cred['hmac_secret']) ?>'); alert('Copied HMAC Secret!');">📋</button>
+                                                            <?php endif; ?>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <span class="webhook-badge <?= esc_attr($cred['status'] ?? 'active') === 'active' ? 'enabled' : 'disabled' ?>">
+                                                            <?= esc_html(strtoupper($cred['status'] ?? 'active')) ?>
+                                                        </span>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column (Credentials Inspector & Webhook logs) -->
+                <div>
                     <!-- Synced Credentials Inspector -->
                     <div class="shield-card">
                         <div class="shield-card-header">
@@ -1295,83 +1105,6 @@ class ShieldSettings {
                         </div>
                     </div>
 
-                        </div>
-                    </div>
-                </div>
-                <div class="shield-tab-panel" data-shield-panel="managers" role="tabpanel">
-                    <p class="shield-tab-section-title">Connected Store Managers</p>
-                    <!-- Connected stores (v2 keys) -->
-                    <div class="shield-card">
-                        <div class="shield-card-header">
-                            <h3 class="shield-card-title">🔐 Connected Store Managers (v2 keyrings)</h3>
-                        </div>
-                        <div class="shield-card-body" style="padding:0">
-                            <?php if (empty($v2_credentials)) : ?>
-                                <div class="shield-empty-state">Chưa có WooCommerce store manager (site2.local) nào được bootstrap kết nối.</div>
-                            <?php else : ?>
-                                <div class="shield-table-wrap">
-                                    <table class="shield-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Store Label</th>
-                                                <th>Store ID</th>
-                                                <th>Key ID</th>
-                                                <th>HMAC Shared Secret</th>
-                                                <th>PayPal HMAC Key</th>
-                                                <th>Stripe HMAC Key</th>
-                                                <th>Status</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($v2_credentials as $cred) : ?>
-                                                <tr>
-                                                    <td><strong><?= esc_html($cred['label'] ?: '(unlabeled)') ?></strong></td>
-                                                    <td><code><?= esc_html($cred['manager_id'] ?? '') ?></code></td>
-                                                    <td><code><?= esc_html($cred['key_id'] ?? '') ?></code></td>
-                                                    <td>
-                                                        <div style="display:flex;gap:6px;align-items:center;">
-                                                            <code><?= esc_html($mask_func($cred['hmac_secret'] ?? '')) ?></code>
-                                                            <?php if (!empty($cred['hmac_secret'])) : ?>
-                                                                <button class="shield-table-copy-btn" onclick="navigator.clipboard.writeText('<?= esc_js($cred['hmac_secret']) ?>'); alert('Copied HMAC Secret!');">📋</button>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    </td>
-                                                    <?php
-                                                        $pp_key  = !empty($cred['hmac_secret']) ? hash_hmac('sha256', 'gateway-proxy:paypal',  $cred['hmac_secret']) : '';
-                                                        $str_key = !empty($cred['hmac_secret']) ? hash_hmac('sha256', 'gateway-proxy:stripe',  $cred['hmac_secret']) : '';
-                                                    ?>
-                                                    <td>
-                                                        <div style="display:flex;gap:6px;align-items:center;">
-                                                            <code><?= esc_html($mask_func($pp_key)) ?></code>
-                                                            <?php if ($pp_key) : ?>
-                                                                <button class="shield-table-copy-btn" onclick="navigator.clipboard.writeText('<?= esc_js($pp_key) ?>'); alert('Copied PayPal HMAC Key!');">📋</button>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <div style="display:flex;gap:6px;align-items:center;">
-                                                            <code><?= esc_html($mask_func($str_key)) ?></code>
-                                                            <?php if ($str_key) : ?>
-                                                                <button class="shield-table-copy-btn" onclick="navigator.clipboard.writeText('<?= esc_js($str_key) ?>'); alert('Copied Stripe HMAC Key!');">📋</button>
-                                                            <?php endif; ?>
-                                                        </div>
-                                                    </td>
-                                                    <td>
-                                                        <span class="webhook-badge <?= esc_attr($cred['status'] ?? 'active') === 'active' ? 'enabled' : 'disabled' ?>">
-                                                            <?= esc_html(strtoupper($cred['status'] ?? 'active')) ?>
-                                                        </span>
-                                                    </td>
-                                                </tr>
-                                            <?php endforeach; ?>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            <?php endif; ?>
-                        </div>
-                    </div>
-                </div>
-                <div class="shield-tab-panel" data-shield-panel="transitions" role="tabpanel">
-                    <div class="shield-tab-grid">
                     <div class="shield-card">
                         <div class="shield-card-header">
                             <h3 class="shield-card-title">📡 Payment Transition Log Queue</h3>
@@ -1408,7 +1141,7 @@ class ShieldSettings {
                                 </div>
                             <?php endif; ?>
                             <?php if (!empty($transition_warning['message'])) : ?>
-                                <div class="shield-alert-warning">
+                                <div style="margin-top:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px 12px;color:#92400e;font-size:11px;">
                                     <strong>Warning:</strong> <?= esc_html($transition_warning['message']) ?>
                                     <?php if (!empty($transition_warning['at'])) : ?>
                                         <br><span><?= esc_html($transition_warning['at']) ?></span>
@@ -1418,18 +1151,20 @@ class ShieldSettings {
                             <p class="shield-input-description">Payment path chỉ ghi local queue. Cron sẽ push batch lên SaaS, lỗi sẽ retry theo backoff.</p>
                         </div>
                     </div>
-                    </div>
+                </div>
+            </div>
+
             <!-- Double Grid logs (Payments + events) -->
-                    <div class="shield-log-grid">
-                        <div class="shield-double-grid">
-                            <!-- Webhook Payments Log -->
-                            <div class="shield-card">
-                                <div class="shield-card-header">
-                                    <h3 class="shield-card-title">💸 Webhook Payment Attempts (Latest 10)</h3>
-                                </div>
-                                <div class="shield-card-body" style="padding:0">
-                                    <?php if (empty($latest_payments)) : ?>
-                                <div class="shield-empty-state">Chưa nhận được giao dịch nào qua webhook.</div>
+            <div class="shield-grid" style="grid-template-columns: 1fr; margin-top:24px;">
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(450px,1fr));gap:24px;">
+                    <!-- Webhook Payments Log -->
+                    <div class="shield-card">
+                        <div class="shield-card-header">
+                            <h3 class="shield-card-title">💸 Webhook Payment Attempts (Latest 10)</h3>
+                        </div>
+                        <div class="shield-card-body" style="padding:0">
+                            <?php if (empty($latest_payments)) : ?>
+                                <div style="padding:24px;text-align:center;color:#64748b;font-size:12px;">Chưa nhận được giao dịch nào qua webhook.</div>
                             <?php else : ?>
                                 <div class="shield-table-wrap">
                                     <table class="shield-table">
@@ -1470,7 +1205,7 @@ class ShieldSettings {
                         </div>
                         <div class="shield-card-body" style="padding:0">
                             <?php if (empty($latest_events)) : ?>
-                                <div class="shield-empty-state">Chưa nhận được event nào từ Stripe.</div>
+                                <div style="padding:24px;text-align:center;color:#64748b;font-size:12px;">Chưa nhận được event nào từ Stripe.</div>
                             <?php else : ?>
                                 <div class="shield-table-wrap">
                                     <table class="shield-table">
@@ -1503,20 +1238,10 @@ class ShieldSettings {
                     </div>
                 </div>
             </div>
-                </div>
-            </div>
         </div>
 
         <script>
         (function($) {
-            $('.shield-tab-button').on('click', function() {
-                const target = $(this).data('shield-tab');
-                $('.shield-tab-button').removeClass('active').attr('aria-selected', 'false');
-                $(this).addClass('active').attr('aria-selected', 'true');
-                $('.shield-tab-panel').removeClass('active');
-                $('[data-shield-panel="' + target + '"]').addClass('active');
-            });
-
             $('#sp-btn-connect').on('click', function(e) {
                 e.preventDefault();
                 const key    = $('#sp_proxy_key').val().trim();
@@ -2136,16 +1861,16 @@ class ShieldSettings {
         foreach ($fields as $label => $info) {
             $val = $info['val'];
             $is_error = !empty($info['error']);
-            $html .= '    <div style="margin-bottom: 16px;">';
-            $html .= '      <span class="webhook-field-label">' . esc_html($label) . '</span>';
-            $html .= '      <div class="webhook-field-wrapper">';
+            $html .= '    <div style="margin-bottom: 12px;">';
+            $html .= '      <span style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">' . esc_html($label) . '</span>';
+            $html .= '      <div style="display:flex;gap:6px;align-items:center;">';
             
             if ($info['copy']) {
-                $html .= '        <input type="text" value="' . esc_attr($val) . '" class="webhook-field-input" readonly>';
-                $html .= '        <button type="button" class="webhook-field-copy-btn" onclick="navigator.clipboard.writeText(\'' . esc_js($val) . '\'); alert(\'Copied!\');">Copy</button>';
+                $html .= '        <input type="text" value="' . esc_attr($val) . '" style="flex:1;height:28px;font-size:11px;font-family:monospace;border:1px solid #cbd5e1;border-radius:4px;background:#f8fafc;padding:0 8px;" readonly>';
+                $html .= '        <button type="button" class="button button-small" onclick="navigator.clipboard.writeText(\'' . esc_js($val) . '\'); alert(\'Copied!\');" style="height:28px;line-height:26px;">Copy</button>';
             } else {
-                $class = $is_error ? 'webhook-field-value error' : 'webhook-field-value';
-                $html .= '        <span class="' . $class . '">' . esc_html($val) . '</span>';
+                $style = $is_error ? 'color:#ef4444;background:#fef2f2;border:1px solid #fecaca;padding:4px 8px;border-radius:4px;font-size:11px;' : 'font-size:11px;color:#334155;word-break:break-all;font-family:monospace;';
+                $html .= '        <span style="' . $style . '">' . esc_html($val) . '</span>';
             }
             $html .= '      </div>';
             $html .= '    </div>';

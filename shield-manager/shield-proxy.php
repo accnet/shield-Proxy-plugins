@@ -24,7 +24,7 @@ if (!defined('ABSPATH')) {
 }
 if (!function_exists('is_plugin_active'))
   require_once(ABSPATH . '/wp-admin/includes/plugin.php');
-define('SHILED_PROXY_VERSION', '2.1.2');
+define('SHILED_PROXY_VERSION', '2.1.3');
 if (!defined('SHIELD_MANAGER_PLUGIN_FILE')) {
   define('SHIELD_MANAGER_PLUGIN_FILE', __FILE__);
 }
@@ -124,6 +124,14 @@ function shield_proxy_stripe_rotation()
 {
   include __DIR__ . '/views/stripe-rotation.php';
 }
+function shield_proxy_cleanup_legacy_sync_queue_cron($force = false)
+{
+  if (!$force && get_option('OPT_SHIELD_LEGACY_SYNC_QUEUE_CRON_CLEANED', 'no') === 'yes') {
+    return;
+  }
+  wp_clear_scheduled_hook('shield_sync_queue_cron');
+  update_option('OPT_SHIELD_LEGACY_SYNC_QUEUE_CRON_CLEANED', 'yes', true);
+}
 
 if (is_plugin_active(ECOM_PAYPAL_PLUGIN) || is_plugin_active(ECOM_STRIPE_PLUGIN)) {
   function devvn_quickbuy_admin_notice__error()
@@ -150,17 +158,18 @@ else {
   require_once(plugin_dir_path(__FILE__) . 'includes/class-site-registry.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-shield-api-client.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-health-checker.php');
-  require_once(plugin_dir_path(__FILE__) . 'includes/class-sync-queue.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-saas-client.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/class-saas-receiver.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/settings.php');
   require_once(plugin_dir_path(__FILE__) . 'includes/rotation.php');
+  require_once(plugin_dir_path(__FILE__) . 'includes/class-proxy-failover.php');
 
-  // Register cron jobs and SaaS webhook receiver.
+  // Register active cron jobs and SaaS webhook receiver.
   add_action('init', function () {
+    shield_proxy_cleanup_legacy_sync_queue_cron(false);
     Shield_Health_Checker::register();
-    Shield_Sync_Queue::register();
     Shield_SaaS_Receiver::init();
+    Shield_Proxy_Failover::init();
   });
 
   add_action('init', 'perform_custom_redirects');
@@ -169,10 +178,10 @@ else {
 
 // Activation / deactivation hooks for cron cleanup.
 register_activation_hook(__FILE__, function () {
+  shield_proxy_cleanup_legacy_sync_queue_cron(true);
   Shield_Health_Checker::register();
-  Shield_Sync_Queue::register();
 });
 register_deactivation_hook(__FILE__, function () {
+  shield_proxy_cleanup_legacy_sync_queue_cron(true);
   Shield_Health_Checker::unregister();
-  Shield_Sync_Queue::unregister();
 });

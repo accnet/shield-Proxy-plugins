@@ -53,6 +53,20 @@ class Helpers {
       return false;
     }
 
+    // New gateway-specific credentials are stored with their gateway and are
+    // used directly. Legacy site-level credentials derive a gateway sub-key.
+    $gateway       = sanitize_text_field(self::requestHeader('X-Shield-Gateway'));
+    $verify_secret = (string) $cred['hmac_secret'];
+    $cred_gateway  = sanitize_text_field($cred['gateway'] ?? '');
+    if ($gateway === 'paypal' || $gateway === 'stripe') {
+      if ($cred_gateway && $cred_gateway !== $gateway) {
+        return false;
+      }
+    }
+    if (($gateway === 'paypal' || $gateway === 'stripe') && !$cred_gateway) {
+      $verify_secret = hash_hmac('sha256', 'gateway-proxy:' . $gateway, $verify_secret);
+    }
+
     $raw_body = file_get_contents('php://input');
     if (!is_string($raw_body)) {
       $raw_body = '';
@@ -67,7 +81,7 @@ class Helpers {
       $manager_id,
       $key_id,
     ]);
-    $expected = hash_hmac('sha256', $canonical, (string) $cred['hmac_secret']);
+    $expected = hash_hmac('sha256', $canonical, $verify_secret);
 
     return hash_equals($expected, (string) $signature);
   }

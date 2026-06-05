@@ -243,7 +243,7 @@ Stripe has features in the [private preview phase](https://docs.stripe.com/relea
 If you would like to send a request to an undocumented API (for example you are in a private beta), or if you prefer to bypass the method definitions in the library and specify your request details directly, you can use the `rawRequest` method on the StripeClient.
 
 ```php
-$stripe = new \Stripe\StripeClient('YOUR_STRIPE_SECRET_KEY');
+$stripe = new \Stripe\StripeClient('sk_test_xyz');
 $response = $stripe->rawRequest('post', '/v1/beta_endpoint', [
   "caveat": "emptor"
 ], [
