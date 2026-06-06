@@ -271,6 +271,12 @@ function register_shield_options_endpoint() {
     'callback'            => 'shield_set_primary_v2_callback',
     'permission_callback' => '__return_true',
   ));
+
+  register_rest_route('shield/v2', '/health', array(
+    'methods'             => 'GET',
+    'callback'            => 'shield_health_v2_callback',
+    'permission_callback' => '__return_true',
+  ));
 }
 
 // =============================================================================
@@ -424,5 +430,35 @@ function shield_health_callback(WP_REST_Request $request) {
     'version' => CARDSSHIELD_VERSION,
     'domain'  => Helpers::getSiteUrl(),
     'gateways' => $gateways,
+  ), 200);
+}
+
+/**
+ * Lightweight v2 health endpoint for SaaS endpoint-node readiness checks.
+ *
+ * This endpoint intentionally avoids payment-provider calls and side effects.
+ * It only proves that WordPress, REST routing, and the Cards Shield plugin are
+ * loaded enough for proxy configuration and payment routing.
+ *
+ * @param WP_REST_Request $request
+ * @return WP_REST_Response
+ */
+function shield_health_v2_callback(WP_REST_Request $request) {
+  $gateways = [];
+  if (class_exists('WC_CS_PayPal_Gateway')) {
+    $gateways[] = 'paypal';
+  }
+  if (class_exists('WC_CS_Stripe_Gateway')) {
+    $gateways[] = 'stripe';
+  }
+
+  return new WP_REST_Response(array(
+    'ok'       => true,
+    'status'   => 'healthy',
+    'plugin'   => 'cards-shield',
+    'version'  => defined('CARDSSHIELD_VERSION') ? CARDSSHIELD_VERSION : null,
+    'domain'   => class_exists('Helpers') ? Helpers::getSiteUrl() : home_url(),
+    'gateways' => $gateways,
+    'time'     => time(),
   ), 200);
 }

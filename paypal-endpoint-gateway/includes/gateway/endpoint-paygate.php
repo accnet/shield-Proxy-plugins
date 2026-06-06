@@ -216,7 +216,12 @@ function handleReturn() {
                     $shieldId,
                     $order->get_total(),
                     $order->get_id(),
-                    $order->get_currency()
+                    $order->get_currency(),
+                    [
+                        'providerTransactionId' => $transaction_id,
+                        'idempotencyKey' => 'paypal:paygate:' . $order->get_id() . ':' . $transaction_id,
+                        'paymentStatus' => $paymentIntent == EP_PAYPAL_INTENT_AUTHORIZE ? 'processing' : 'succeeded',
+                    ]
                 );
             }
 
@@ -708,7 +713,17 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         $order->reduce_order_stock();
         $isEnableEndpointMode = true;
         if ($isEnableEndpointMode) {
-                    Shield_PayPal_Endpoint_Client::report_transaction($activatedProxy['shieldId'] ?? null, $order->get_total(), $order->get_id(), $order->get_currency());
+                    Shield_PayPal_Endpoint_Client::report_transaction(
+                        $activatedProxy['shieldId'] ?? null,
+                        $order->get_total(),
+                        $order->get_id(),
+                        $order->get_currency(),
+                        [
+                            'providerTransactionId' => $ppPayment->id ?? null,
+                            'idempotencyKey' => 'paypal:express:' . $order->get_id() . ':' . ($ppPayment->id ?? ''),
+                            'paymentStatus' => 'succeeded',
+                        ]
+                    );
         } else {
             if (isEnabledAmountRotation()) {
                 performProxyAmountRotation($activatedProxy, $order->get_total());
@@ -1425,4 +1440,3 @@ function cs_paypal_plugin_activation() {
 function ep_paypal_pp_remove_shipping_taxes(WC_Order_Item_Shipping $item) {
     $item->set_taxes(false);
 }
-

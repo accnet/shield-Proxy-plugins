@@ -228,9 +228,10 @@ class Shield_PayPal_Endpoint_Client
      * @param float  $amount     Order total amount
      * @param string $order_id   WooCommerce order ID
      * @param string $currency   Currency code (default: USD)
+     * @param array  $meta       Optional provider receipt/idempotency metadata
      * @return array|false       Response data or false on failure
      */
-    public static function report_transaction($shield_id, $amount, $order_id, $currency = 'USD')
+    public static function report_transaction($shield_id, $amount, $order_id, $currency = 'USD', $meta = [])
     {
         if (get_option(self::opt('CONNECTED'), 'no') !== 'yes') {
             return false;
@@ -243,13 +244,50 @@ class Shield_PayPal_Endpoint_Client
             return false;
         }
 
+        $trace_id = self::normalize_receipt_value($meta['traceId'] ?? $meta['trace_id'] ?? '');
+        if (empty($trace_id)) {
+            $trace_id = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : uniqid('endpoint-trace-', true);
+        }
+
+        $idempotency_key = self::normalize_receipt_value($meta['idempotencyKey'] ?? $meta['idempotency_key'] ?? '');
+        if (empty($idempotency_key)) {
+            $idempotency_key = implode(':', [
+                'endpoint',
+                md5((string) $connection_code),
+                'paypal',
+                'order',
+                (string) $order_id,
+                'shield',
+                (string) $shield_id,
+                'report',
+            ]);
+        }
+
         $payload = [
             'connectionCode' => $connection_code,
             'shieldId'       => (string) $shield_id,
             'amount'         => (float) $amount,
             'orderId'        => (string) $order_id,
             'currency'       => $currency ?: 'USD',
+            'provider'       => 'paypal',
+            'idempotencyKey' => $idempotency_key,
+            'traceId'        => $trace_id,
+            'paymentStatus'  => self::normalize_payment_status($meta['paymentStatus'] ?? $meta['payment_status'] ?? 'succeeded'),
         ];
+
+        foreach ([
+            'providerTransactionId' => ['providerTransactionId', 'provider_transaction_id', 'transaction_id'],
+            'paymentIntentId'       => ['paymentIntentId', 'payment_intent_id'],
+            'eventId'               => ['eventId', 'event_id'],
+        ] as $target_key => $source_keys) {
+            foreach ($source_keys as $source_key) {
+                $value = self::normalize_receipt_value($meta[$source_key] ?? '');
+                if (!empty($value)) {
+                    $payload[$target_key] = $value;
+                    break;
+                }
+            }
+        }
 
         $body = wp_json_encode($payload);
         $headers = self::build_hmac_headers($body);
@@ -291,6 +329,19 @@ class Shield_PayPal_Endpoint_Client
         return $data;
     }
 
+    private static function normalize_receipt_value($value)
+    {
+        $value = is_scalar($value) ? trim((string) $value) : '';
+        return $value === '' ? '' : substr($value, 0, 512);
+    }
+
+    private static function normalize_payment_status($status)
+    {
+        $status = self::normalize_receipt_value($status);
+        $allowed = ['created', 'requires_action', 'processing', 'succeeded', 'failed', 'canceled', 'refunded', 'partially_refunded'];
+        return in_array($status, $allowed, true) ? $status : 'succeeded';
+    }
+
     // ─── Active Node Helpers ──────────────────────────────────────────────
 
     /**
@@ -306,14 +357,14 @@ class Shield_PayPal_Endpoint_Client
         }
 
         foreach ($nodes as $node) {
-            if (!empty($node['isCurrent']) && ($node['status'] ?? '') === 'active') {
+            if (!empty($node['isCurrent']) && self::is_node_usable($node)) {
                 return $node;
             }
         }
 
-        // Fallback: return first active node
+        // Fallback: return first usable node.
         foreach ($nodes as $node) {
-            if (($node['status'] ?? '') === 'active') {
+            if (self::is_node_usable($node)) {
                 return $node;
             }
         }
@@ -332,7 +383,7 @@ class Shield_PayPal_Endpoint_Client
         }
 
         return array_filter($nodes, function ($node) {
-            return ($node['status'] ?? '') === 'active';
+            return self::is_node_usable($node);
         });
     }
 
@@ -347,9 +398,13 @@ class Shield_PayPal_Endpoint_Client
         }
 
         $changed = false;
+        $matchedUsable = false;
         foreach ($nodes as &$node) {
             $was = !empty($node['isCurrent']);
-            $should = ($node['shieldId'] ?? '') === $shield_id;
+            $should = (($node['shieldId'] ?? '') === $shield_id) && self::is_node_usable($node);
+            if ($should) {
+                $matchedUsable = true;
+            }
             if ($was !== $should) {
                 $node['isCurrent'] = $should;
                 $changed = true;
@@ -359,6 +414,10 @@ class Shield_PayPal_Endpoint_Client
 
         if ($changed) {
             update_option(self::opt('NODES'), $nodes, true);
+        }
+
+        if (!$matchedUsable) {
+            self::log('Skipped active node update because the SaaS-selected shield is not usable yet: ' . $shield_id);
         }
     }
 
@@ -394,6 +453,35 @@ class Shield_PayPal_Endpoint_Client
     public static function has_active_nodes()
     {
         return !empty(self::get_active_nodes());
+    }
+
+    /**
+     * A node is safe for checkout only when SaaS marks it usable.
+     * Older configs did not include isUsable/bootstrapStatus/healthStatus, so active nodes with derivedKey remain compatible.
+     */
+    public static function is_node_usable($node)
+    {
+        if (!is_array($node)) {
+            return false;
+        }
+
+        if (($node['status'] ?? '') !== 'active') {
+            return false;
+        }
+
+        if (array_key_exists('isUsable', $node)) {
+            return !empty($node['isUsable']) && !empty($node['derivedKey']);
+        }
+
+        if (isset($node['bootstrapStatus']) && $node['bootstrapStatus'] !== 'ready') {
+            return false;
+        }
+
+        if (isset($node['healthStatus']) && $node['healthStatus'] === 'unhealthy') {
+            return false;
+        }
+
+        return !empty($node['derivedKey']);
     }
 
     // ─── HMAC ─────────────────────────────────────────────────────────────
@@ -617,6 +705,13 @@ class Shield_PayPal_Endpoint_Client
             }
             if (!isset($node['shieldId']) && isset($node['id'])) {
                 $node['shieldId'] = $node['id'];
+            }
+            if (array_key_exists('isUsable', $node)) {
+                $node['isUsable'] = !empty($node['isUsable']);
+            } elseif (isset($node['bootstrapStatus']) && $node['bootstrapStatus'] !== 'ready') {
+                $node['isUsable'] = false;
+            } elseif (isset($node['healthStatus']) && $node['healthStatus'] === 'unhealthy') {
+                $node['isUsable'] = false;
             }
         }
         return $node;

@@ -436,7 +436,14 @@ function handle_route() {
                     $activatedProxy['shieldId'] ?? null,
                     $order->get_total(),
                     $order->get_id(),
-                    $order->get_currency()
+                    $order->get_currency(),
+                    [
+                        'providerTransactionId' => $body->charge->id ?? null,
+                        'paymentIntentId' => $paymentIntent->id ?? null,
+                        'idempotencyKey' => 'stripe:confirm:' . $order->get_id() . ':' . ($paymentIntent->id ?? ''),
+                        'traceId' => $traceId,
+                        'paymentStatus' => $isAuthorized ? 'processing' : 'succeeded',
+                    ]
                 );
             }
             csStripeSaveTransactionId($order, $paymentIntent->id);

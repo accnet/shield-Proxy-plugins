@@ -13,14 +13,14 @@ if (!function_exists('ep_endpoint_signed_request_args')) {
 
         // Get derivedKey from active node or from proxy data
         $derivedKey = '';
-        if (is_array($proxyOrUrl) && !empty($proxyOrUrl['derivedKey'])) {
+        if (is_array($proxyOrUrl) && Shield_PayPal_Endpoint_Client::is_node_usable($proxyOrUrl)) {
             $derivedKey = $proxyOrUrl['derivedKey'];
         } else {
             if (is_string($proxyOrUrl)) {
                 $nodes = get_option(EP_PP_NODES, []);
                 if (is_array($nodes)) {
                     foreach ($nodes as $node) {
-                        if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl)) {
+                        if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl) && Shield_PayPal_Endpoint_Client::is_node_usable($node)) {
                             $derivedKey = $node['derivedKey'] ?? '';
                             break;
                         }
@@ -62,14 +62,14 @@ if (!function_exists('shield_proxy_signed_request_args')) {
 
         if ($gateway === 'stripe' && class_exists('Shield_Stripe_Endpoint_Client')) {
             $derivedKey = '';
-            if (is_array($proxyOrUrl) && !empty($proxyOrUrl['derivedKey'])) {
+            if (is_array($proxyOrUrl) && Shield_Stripe_Endpoint_Client::is_node_usable($proxyOrUrl)) {
                 $derivedKey = $proxyOrUrl['derivedKey'];
             } else {
                 if (is_string($proxyOrUrl)) {
                     $nodes = get_option('EP_ST_NODES', []);
                     if (is_array($nodes)) {
                         foreach ($nodes as $node) {
-                            if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl)) {
+                            if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl) && Shield_Stripe_Endpoint_Client::is_node_usable($node)) {
                                 $derivedKey = $node['derivedKey'] ?? '';
                                 break;
                             }
@@ -95,14 +95,14 @@ if (!function_exists('shield_proxy_signed_request_args')) {
         // Default or PayPal
         if (class_exists('Shield_PayPal_Endpoint_Client')) {
             $derivedKey = '';
-            if (is_array($proxyOrUrl) && !empty($proxyOrUrl['derivedKey'])) {
+            if (is_array($proxyOrUrl) && Shield_PayPal_Endpoint_Client::is_node_usable($proxyOrUrl)) {
                 $derivedKey = $proxyOrUrl['derivedKey'];
             } else {
                 if (is_string($proxyOrUrl)) {
                     $nodes = get_option('EP_PP_NODES', []);
                     if (is_array($nodes)) {
                         foreach ($nodes as $node) {
-                            if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl)) {
+                            if (trailingslashit($node['url']) === trailingslashit($proxyOrUrl) && Shield_PayPal_Endpoint_Client::is_node_usable($node)) {
                                 $derivedKey = $node['derivedKey'] ?? '';
                                 break;
                             }
