@@ -99,6 +99,25 @@ function shield_hmac_keys_v2_revoke($manager_id, $key_id = '') {
 }
 
 function shield_verify_bootstrap_token(WP_REST_Request $request) {
+  // A7: IP Whitelist check
+  $allowed_ips = get_option('shield_bootstrap_allowed_ips', '');
+  if (!empty($allowed_ips)) {
+    $ip = sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? '');
+    $whitelist = array_map('trim', explode(',', $allowed_ips));
+    if (!in_array($ip, $whitelist, true)) {
+      return false;
+    }
+  }
+
+  // A6: Rate limiting — 5 requests per minute per IP
+  $ip = sanitize_text_field($_SERVER['REMOTE_ADDR'] ?? 'unknown');
+  $rate_key = 'shield_boot_rl_' . md5($ip);
+  $attempts = (int) get_transient($rate_key);
+  if ($attempts >= 5) {
+    return false; // Rate limited
+  }
+  set_transient($rate_key, $attempts + 1, 60); // 1-minute window
+
   $token = sanitize_text_field($request->get_header('X-Shield-Bootstrap-Token') ?? '');
   if (!$token) {
     $payload = $request->get_json_params();

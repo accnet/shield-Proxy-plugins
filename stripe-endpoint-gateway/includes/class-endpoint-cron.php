@@ -23,18 +23,25 @@ class Shield_Stripe_Endpoint_Cron
      */
     public static function register()
     {
-        $hook = self::prefix() . 'CONFIG_PULL';
+        $pull_hook = self::prefix() . 'CONFIG_PULL';
+        $flush_hook = self::prefix() . 'TX_QUEUE_FLUSH';
 
         // Add 5-minute schedule
         add_filter('cron_schedules', [__CLASS__, 'add_cron_schedule']);
 
-        // Schedule if not already scheduled
-        if (!wp_next_scheduled($hook)) {
-            wp_schedule_event(time(), 'five_minutes', $hook);
+        // Schedule config pull if not already scheduled
+        if (!wp_next_scheduled($pull_hook)) {
+            wp_schedule_event(time(), 'five_minutes', $pull_hook);
         }
 
-        // Hook the pull action
-        add_action($hook, [__CLASS__, 'do_config_pull']);
+        // Schedule queue flush if not already scheduled
+        if (!wp_next_scheduled($flush_hook)) {
+            wp_schedule_event(time(), 'five_minutes', $flush_hook);
+        }
+
+        // Hook the actions
+        add_action($pull_hook, [__CLASS__, 'do_config_pull']);
+        add_action($flush_hook, [__CLASS__, 'do_queue_flush']);
     }
 
     /**
@@ -42,8 +49,8 @@ class Shield_Stripe_Endpoint_Cron
      */
     public static function unregister()
     {
-        $hook = self::prefix() . 'CONFIG_PULL';
-        wp_clear_scheduled_hook($hook);
+        wp_clear_scheduled_hook(self::prefix() . 'CONFIG_PULL');
+        wp_clear_scheduled_hook(self::prefix() . 'TX_QUEUE_FLUSH');
     }
 
     /**
@@ -70,5 +77,17 @@ class Shield_Stripe_Endpoint_Cron
         }
 
         Shield_Stripe_Endpoint_Client::pull_config();
+    }
+
+    /**
+     * Flush the transaction retry queue.
+     */
+    public static function do_queue_flush()
+    {
+        if (!class_exists('Shield_Stripe_Endpoint_Client')) {
+            return;
+        }
+
+        Shield_Stripe_Endpoint_Client::flush_queue();
     }
 }

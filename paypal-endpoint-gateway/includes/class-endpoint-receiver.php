@@ -59,7 +59,7 @@ class Shield_PayPal_Endpoint_Receiver
     /**
      * Handle config update push from SaaS.
      *
-     * Expected headers: X-SaaS-Signature, X-SaaS-Timestamp
+     * Expected headers: X-SaaS-Signature, X-SaaS-Timestamp, X-SaaS-Nonce
      * Expected body: { endpointId, type, enableRotation, rotationMethod, nodes[] }
      */
     public static function handle_config_update($request)
@@ -67,6 +67,7 @@ class Shield_PayPal_Endpoint_Receiver
         // Verify HMAC signature
         $signature = $request->get_header('X-SaaS-Signature');
         $timestamp = $request->get_header('X-SaaS-Timestamp');
+        $nonce     = $request->get_header('X-SaaS-Nonce');
         $body_raw  = $request->get_body();
 
         if (empty($signature) || empty($timestamp)) {
@@ -81,6 +82,18 @@ class Shield_PayPal_Endpoint_Receiver
                 'success' => false,
                 'message' => 'Invalid HMAC signature',
             ], 401);
+        }
+
+        // Nonce replay protection (if nonce header is present)
+        if (!empty($nonce)) {
+            $nonce_key = 'ep_pp_nonce_' . md5($nonce);
+            if (get_transient($nonce_key)) {
+                return new WP_REST_Response([
+                    'success' => false,
+                    'message' => 'Nonce already used (replay detected)',
+                ], 409);
+            }
+            set_transient($nonce_key, '1', 900); // 15 minutes
         }
 
         $data = json_decode($body_raw, true);

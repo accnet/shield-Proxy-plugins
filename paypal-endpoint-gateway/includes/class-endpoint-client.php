@@ -207,6 +207,12 @@ class Shield_PayPal_Endpoint_Client
             update_option(self::opt('ROTATION_METHOD'), $data['rotationMethod'], true);
         }
 
+        // Auto-rotate: if SaaS sent a new secret, update it locally
+        if (!empty($data['newHmacSecret'])) {
+            update_option(self::opt('HMAC_SECRET'), $data['newHmacSecret'], true);
+            self::log('HMAC secret auto-rotated by SaaS');
+        }
+
         return true;
     }
 
@@ -256,6 +262,7 @@ class Shield_PayPal_Endpoint_Client
 
         if (is_wp_error($response)) {
             self::log('report_transaction error: ' . $response->get_error_message());
+            self::queue_transaction($payload);
             return false;
         }
 
@@ -269,6 +276,7 @@ class Shield_PayPal_Endpoint_Client
 
         if ($code !== 200 && $code !== 201) {
             self::log('report_transaction HTTP ' . $code . ': ' . wp_remote_retrieve_body($response));
+            self::queue_transaction($payload);
             return false;
         }
 
@@ -448,6 +456,126 @@ class Shield_PayPal_Endpoint_Client
             'X-Shield-Key-Id'     => $key_id,
             'X-Shield-Gateway'    => 'paypal',
         ];
+    }
+
+    // ─── Transaction Retry Queue ───────────────────────────────────────────
+
+    /**
+     * Add a failed transaction payload to the local retry queue.
+     *
+     * @param array $payload Transaction payload
+     */
+    public static function queue_transaction($payload)
+    {
+        $queue = get_option(self::opt('TX_QUEUE'), []);
+        if (!is_array($queue)) {
+            $queue = [];
+        }
+
+        // Cap queue at 5000 entries, drop oldest if full
+        if (count($queue) >= 5000) {
+            array_shift($queue);
+        }
+
+        $queue[] = [
+            'payload'    => $payload,
+            'queued_at'  => time(),
+            'attempts'   => 0,
+            'next_retry' => time(),
+        ];
+
+        update_option(self::opt('TX_QUEUE'), $queue, false);
+        self::log('Transaction queued for retry (order: ' . ($payload['orderId'] ?? '?') . ')');
+    }
+
+    /**
+     * Flush the retry queue: attempt to re-send failed transactions.
+     * Called by cron every 5 minutes.
+     *
+     * @return int Number of successfully flushed entries
+     */
+    public static function flush_queue()
+    {
+        $queue = get_option(self::opt('TX_QUEUE'), []);
+        if (!is_array($queue) || empty($queue)) {
+            return 0;
+        }
+
+        $saas_url = get_option(self::opt('SAAS_URL'), '');
+        if (empty($saas_url)) {
+            return 0;
+        }
+
+        $now = time();
+        $remaining = [];
+        $flushed = 0;
+        $max_per_run = 50;
+        $processed = 0;
+
+        foreach ($queue as $item) {
+            if (($item['next_retry'] ?? 0) > $now) {
+                $remaining[] = $item;
+                continue;
+            }
+
+            if ($processed >= $max_per_run) {
+                $remaining[] = $item;
+                continue;
+            }
+
+            $processed++;
+            $payload = $item['payload'] ?? [];
+            $attempts = ($item['attempts'] ?? 0) + 1;
+
+            $body = wp_json_encode($payload);
+            $headers = self::build_hmac_headers($body);
+
+            $response = wp_remote_post($saas_url . '/api/endpoints/transaction', [
+                'method'  => 'POST',
+                'headers' => array_merge([
+                    'Content-Type' => 'application/json',
+                ], $headers),
+                'body'    => $body,
+                'timeout' => 15,
+            ]);
+
+            $code = is_wp_error($response) ? 0 : (int) wp_remote_retrieve_response_code($response);
+
+            if ($code === 200 || $code === 201 || $code === 409) {
+                $flushed++;
+                continue;
+            }
+
+            $backoff = min(60 * pow(2, $attempts - 1), 3600);
+
+            if ($attempts > 15 || ($now - ($item['queued_at'] ?? $now)) > 86400) {
+                self::log('Queue entry dropped after ' . $attempts . ' attempts (order: ' . ($payload['orderId'] ?? '?') . ')');
+                continue;
+            }
+
+            $item['attempts'] = $attempts;
+            $item['next_retry'] = $now + $backoff;
+            $remaining[] = $item;
+        }
+
+        update_option(self::opt('TX_QUEUE'), $remaining, false);
+
+        if ($flushed > 0) {
+            self::log('Queue flush: ' . $flushed . ' transactions sent, ' . count($remaining) . ' remaining');
+        }
+
+        return $flushed;
+    }
+
+    /**
+     * Get the current queue size.
+     *
+     * @return int
+     */
+    public static function queue_count()
+    {
+        $queue = get_option(self::opt('TX_QUEUE'), []);
+        return is_array($queue) ? count($queue) : 0;
     }
 
     // ─── Logging ──────────────────────────────────────────────────────────
