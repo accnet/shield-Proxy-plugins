@@ -17,6 +17,8 @@ $endpoint_type  = get_option('EP_ST_TYPE', '');
 $rotation_method = get_option('EP_ST_ROTATION_METHOD', '');
 $enable_rotation = get_option('EP_ST_ENABLE_ROTATION', false);
 $connected_at   = get_option('EP_ST_CONNECTED_AT', 0);
+$endpoint_id    = get_option('EP_ST_ENDPOINT_ID', '');
+$last_sync_at   = get_option('EP_ST_LAST_SYNC_AT', 0);
 $nodes          = get_option('EP_ST_NODES', []);
 if (!is_array($nodes)) {
     $nodes = [];
@@ -51,6 +53,10 @@ if (!is_array($nodes)) {
                                     <td><code><?php echo esc_html($conn_code); ?></code></td>
                                 </tr>
                                 <tr>
+                                    <th scope="row">Endpoint ID</th>
+                                    <td><code><?php echo esc_html($endpoint_id ?: '-'); ?></code></td>
+                                </tr>
+                                <tr>
                                     <th scope="row">Endpoint Name</th>
                                     <td><strong><?php echo esc_html($endpoint_name ?: '-'); ?></strong></td>
                                 </tr>
@@ -71,6 +77,10 @@ if (!is_array($nodes)) {
                                 <tr>
                                     <th scope="row">Connected At</th>
                                     <td><?php echo $connected_at ? date('Y-m-d H:i:s', $connected_at) : '-'; ?></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Last Update</th>
+                                    <td><strong><?php echo $last_sync_at ? date('Y-m-d H:i:s', $last_sync_at) : '-'; ?></strong></td>
                                 </tr>
                             </tbody>
                         </table>

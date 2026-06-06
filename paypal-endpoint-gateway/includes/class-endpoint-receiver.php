@@ -115,6 +115,8 @@ class Shield_PayPal_Endpoint_Receiver
             update_option(self::opt('ROTATION_METHOD'), sanitize_text_field($data['rotationMethod']), true);
         }
 
+        update_option(self::opt('LAST_SYNC_AT'), time(), true);
+
         self::log('Config update received: ' . count($data['nodes'] ?? []) . ' nodes');
 
         return new WP_REST_Response([

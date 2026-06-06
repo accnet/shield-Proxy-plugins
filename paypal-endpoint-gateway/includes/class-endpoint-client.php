@@ -102,6 +102,7 @@ class Shield_PayPal_Endpoint_Client
         update_option(self::opt('ENABLE_ROTATION'), $data['enableRotation'] ?? false, true);
         update_option(self::opt('ROTATION_METHOD'), $data['rotationMethod'] ?? 'by_volume', true);
         update_option(self::opt('CONNECTED_AT'), time(), true);
+        update_option(self::opt('LAST_SYNC_AT'), time(), true);
 
         // Save nodes
         if (isset($data['nodes']) && is_array($data['nodes'])) {
@@ -212,6 +213,8 @@ class Shield_PayPal_Endpoint_Client
             update_option(self::opt('HMAC_SECRET'), $data['newHmacSecret'], true);
             self::log('HMAC secret auto-rotated by SaaS');
         }
+
+        update_option(self::opt('LAST_SYNC_AT'), time(), true);
 
         return true;
     }
