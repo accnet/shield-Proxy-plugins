@@ -2,33 +2,33 @@
 /**
  * The order endpoint.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Endpoint
+ * @package EP_PayPal\ApiClient\Endpoint
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
 use stdClass;
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\ApplicationContext;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\AuthorizationStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\CaptureStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\OrderStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Payer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentMethod;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentToken;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\PayPalApiException;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\OrderFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PatchCollectionFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Helper\ErrorResponse;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\ApplicationContextRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PayPalRequestIdRepository;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Entity\ApplicationContext;
+use EP_PayPal\ApiClient\Entity\AuthorizationStatus;
+use EP_PayPal\ApiClient\Entity\CaptureStatus;
+use EP_PayPal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Entity\OrderStatus;
+use EP_PayPal\ApiClient\Entity\Payer;
+use EP_PayPal\ApiClient\Entity\PaymentMethod;
+use EP_PayPal\ApiClient\Entity\PaymentToken;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Exception\PayPalApiException;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Factory\OrderFactory;
+use EP_PayPal\ApiClient\Factory\PatchCollectionFactory;
+use EP_PayPal\ApiClient\Helper\ErrorResponse;
+use EP_PayPal\ApiClient\Repository\ApplicationContextRepository;
+use EP_PayPal\ApiClient\Repository\PayPalRequestIdRepository;
 use Psr\Log\LoggerInterface;
-use WooCommerce\WootifyPaypal\Subscription\Helper\SubscriptionHelper;
+use EP_PayPal\Subscription\Helper\SubscriptionHelper;
 use WP_Error;
 
 /**

@@ -2,12 +2,12 @@
 /**
  * The API module.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient
+ * @package EP_PayPal\ApiClient
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient;
+namespace EP_PayPal\ApiClient;
 
 use Dhii\Container\ServiceProvider;
 use Dhii\Modular\Module\ModuleInterface;

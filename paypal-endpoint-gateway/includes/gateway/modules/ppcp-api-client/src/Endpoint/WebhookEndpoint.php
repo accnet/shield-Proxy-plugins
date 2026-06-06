@@ -2,20 +2,20 @@
 /**
  * The webhook endpoint.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Endpoint
+ * @package EP_PayPal\ApiClient\Endpoint
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Webhook;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\WebhookEvent;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\PayPalApiException;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\WebhookEventFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\WebhookFactory;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Entity\Webhook;
+use EP_PayPal\ApiClient\Entity\WebhookEvent;
+use EP_PayPal\ApiClient\Exception\PayPalApiException;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Factory\WebhookEventFactory;
+use EP_PayPal\ApiClient\Factory\WebhookFactory;
 use Psr\Log\LoggerInterface;
 
 /**

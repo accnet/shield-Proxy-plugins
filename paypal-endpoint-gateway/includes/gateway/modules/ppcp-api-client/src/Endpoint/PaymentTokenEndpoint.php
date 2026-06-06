@@ -2,24 +2,24 @@
 /**
  * The payment token endpoint.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Endpoint
+ * @package EP_PayPal\ApiClient\Endpoint
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentToken;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentTokenActionLinks;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\AlreadyVaultedException;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\PayPalApiException;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentTokenActionLinksFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentTokenFactory;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Entity\PaymentToken;
+use EP_PayPal\ApiClient\Entity\PaymentTokenActionLinks;
+use EP_PayPal\ApiClient\Exception\AlreadyVaultedException;
+use EP_PayPal\ApiClient\Exception\PayPalApiException;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Factory\PaymentTokenActionLinksFactory;
+use EP_PayPal\ApiClient\Factory\PaymentTokenFactory;
 use Psr\Log\LoggerInterface;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\CustomerRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PayPalRequestIdRepository;
+use EP_PayPal\ApiClient\Repository\CustomerRepository;
+use EP_PayPal\ApiClient\Repository\PayPalRequestIdRepository;
 
 /**
  * Class PaymentTokenEndpoint

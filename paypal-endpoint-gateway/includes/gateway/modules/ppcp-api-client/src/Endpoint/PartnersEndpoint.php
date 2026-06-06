@@ -2,19 +2,19 @@
 /**
  * The Partners Endpoint.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Endpoint
+ * @package EP_PayPal\ApiClient\Endpoint
  */
 
 declare( strict_types=1 );
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
 use Psr\Log\LoggerInterface;
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\SellerStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\PayPalApiException;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\SellerStatusFactory;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Entity\SellerStatus;
+use EP_PayPal\ApiClient\Exception\PayPalApiException;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Factory\SellerStatusFactory;
 
 /**
  * Class PartnersEndpoint

@@ -2,16 +2,16 @@
 /**
  * The Payments factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Authorization;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Capture;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Payments;
+use EP_PayPal\ApiClient\Entity\Authorization;
+use EP_PayPal\ApiClient\Entity\Capture;
+use EP_PayPal\ApiClient\Entity\Payments;
 
 /**
  * Class PaymentsFactory

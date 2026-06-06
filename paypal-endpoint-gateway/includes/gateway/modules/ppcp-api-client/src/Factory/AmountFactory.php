@@ -2,22 +2,22 @@
 /**
  * The Amount factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Amount;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\AmountBreakdown;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Item;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Money;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\Amount;
+use EP_PayPal\ApiClient\Entity\AmountBreakdown;
+use EP_PayPal\ApiClient\Entity\Item;
+use EP_PayPal\ApiClient\Entity\Money;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 // WOOTIFY comment code
-//use WooCommerce\WootifyPaypal\WcGateway\Gateway\CardButtonGateway;
-//use WooCommerce\WootifyPaypal\WcGateway\Gateway\CreditCardGateway;
-//use WooCommerce\WootifyPaypal\WcGateway\Gateway\PayPalGateway;
+//use EP_PayPal\WcGateway\Gateway\CardButtonGateway;
+//use EP_PayPal\WcGateway\Gateway\CreditCardGateway;
+//use EP_PayPal\WcGateway\Gateway\PayPalGateway;
 
 /**
  * Class AmountFactory

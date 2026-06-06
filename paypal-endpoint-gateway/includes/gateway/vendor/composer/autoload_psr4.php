@@ -6,7 +6,7 @@ $vendorDir = dirname(dirname(__FILE__));
 $baseDir = dirname($vendorDir);
 
 return array(
-    'WooCommerce\\WootifyPaypal\\ApiClient\\' => array($baseDir . '/modules/ppcp-api-client/src'),
+    'EP_PayPal\\ApiClient\\' => array($baseDir . '/modules/ppcp-api-client/src'),
     'Wikimedia\\Composer\\Merge\\V2\\' => array($vendorDir . '/wikimedia/composer-merge-plugin/src'),
     'Psr\\Container\\' => array($vendorDir . '/psr/container/src'),
     'Interop\\Container\\' => array($vendorDir . '/container-interop/service-provider/src'),

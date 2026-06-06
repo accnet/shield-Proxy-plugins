@@ -2,12 +2,12 @@
 /**
  * The customer repository.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Repository
+ * @package EP_PayPal\ApiClient\Repository
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Repository;
+namespace EP_PayPal\ApiClient\Repository;
 
 /**
  * Class CustomerRepository

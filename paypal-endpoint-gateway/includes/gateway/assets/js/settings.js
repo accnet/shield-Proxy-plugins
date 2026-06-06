@@ -306,7 +306,7 @@ jQuery(document).ready(function ($) {
         $('#sync-tracking-info-btn').attr("disabled", isOn);
     }
 
-    function syncTrackingInfo() {
+    function ep_paypal_sync_tracking_info() {
 
         var syncCount = $('#sync-count').val();
         if (parseInt(syncCount) === 0) {
@@ -317,7 +317,7 @@ jQuery(document).ready(function ($) {
 
         var data = {
             'action': 'WOOTIFY_gateway_paypal_action',
-            'command': 'syncTrackingInfo',
+            'command': 'ep_paypal_sync_tracking_info',
         };
         jQuery.ajaxSetup({timeout: 100000});
         jQuery.post(cs_ajax_object.ajax_url, data, function (response) {
@@ -378,7 +378,7 @@ jQuery(document).ready(function ($) {
     });
 
     $(document).on('click', '#sync-tracking-info-btn', function () {
-        syncTrackingInfo();
+        ep_paypal_sync_tracking_info();
     });
     
     $(document).on('click', '#btn-save-endpoint-settings', function () {

@@ -4,12 +4,12 @@
  *
  * @see https://developer.paypal.com/docs/api/payments/v2/#definition-authorization_status_details
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Entity
+ * @package EP_PayPal\ApiClient\Entity
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Entity;
+namespace EP_PayPal\ApiClient\Entity;
 
 /**
  * Class AuthorizationStatusDetails

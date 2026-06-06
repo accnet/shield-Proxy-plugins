@@ -2,18 +2,18 @@
 /**
  * The Order factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\OrderStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\ApplicationContextRepository;
+use EP_PayPal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Entity\OrderStatus;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Repository\ApplicationContextRepository;
 
 /**
  * Class OrderFactory

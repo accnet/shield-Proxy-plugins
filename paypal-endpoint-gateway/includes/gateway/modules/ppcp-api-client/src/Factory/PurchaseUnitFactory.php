@@ -2,17 +2,17 @@
 /**
  * The PurchaseUnit factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Item;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PayeeRepository;
+use EP_PayPal\ApiClient\Entity\Item;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Repository\PayeeRepository;
 
 /**
  * Class PurchaseUnitFactory
@@ -121,10 +121,7 @@ class PurchaseUnitFactory {
 		) {
 			$shipping = null;
 		}
-		$ppSettings = get_option('woocommerce_wootify_paypal_settings', []);
-		if (empty($ppSettings)) {
-			$ppSettings = get_option('woocommerce_paypal_settings', []);
-		}
+		$ppSettings = get_option('woocommerce_endpoint_paypal_settings', []);
 		$invoicePrefix = $ppSettings['invoice_prefix'] ?? 'WC-';
 		$reference_id    = 'default';
 		$description     = '';
@@ -299,4 +296,3 @@ class PurchaseUnitFactory {
 		return in_array( $country_code, $countries, true );
 	}
 }
-

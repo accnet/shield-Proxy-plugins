@@ -2,17 +2,17 @@
 /**
  * The SellerReceivableBreakdown Factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use stdClass;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PlatformFee;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\SellerReceivableBreakdown;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\PlatformFee;
+use EP_PayPal\ApiClient\Entity\SellerReceivableBreakdown;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class SellerReceivableBreakdownFactory

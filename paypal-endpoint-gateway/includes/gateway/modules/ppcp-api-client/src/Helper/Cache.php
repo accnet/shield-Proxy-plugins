@@ -2,12 +2,12 @@
 /**
  * Manages caching of values.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Helper
+ * @package EP_PayPal\ApiClient\Helper
  */
 
 declare( strict_types=1 );
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Helper;
+namespace EP_PayPal\ApiClient\Helper;
 
 /**
  * Class Cache

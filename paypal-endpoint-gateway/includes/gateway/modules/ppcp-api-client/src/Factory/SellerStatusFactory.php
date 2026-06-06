@@ -2,15 +2,15 @@
 /**
  * Factory for the SellerStatus object.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare( strict_types=1 );
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\SellerStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\SellerStatusProduct;
+use EP_PayPal\ApiClient\Entity\SellerStatus;
+use EP_PayPal\ApiClient\Entity\SellerStatusProduct;
 
 /**
  * Class SellerStatusFactory

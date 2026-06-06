@@ -2,12 +2,12 @@
 /**
  * Create order for PUI.
  *
- * @package WooCommerce\WootifyPaypal\WcGateway\Gateway\PayUponInvoice
+ * @package EP_PayPal\WcGateway\Gateway\PayUponInvoice
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
 use Psr\Log\LoggerInterface;
 use RuntimeException;
@@ -18,16 +18,16 @@ use WC_Order_Item_Fee;
 use WC_Order_Item_Product;
 use WC_Product;
 use WC_Tax;
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\RequestTrait;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Item;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Money;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\PayPalApiException;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\OrderFactory;
-use WooCommerce\WootifyPaypal\WcGateway\Gateway\PayUponInvoice\FraudNet;
-use WooCommerce\WootifyPaypal\WcGateway\Gateway\PayUponInvoice\PaymentSource;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Endpoint\RequestTrait;
+use EP_PayPal\ApiClient\Entity\Item;
+use EP_PayPal\ApiClient\Entity\Money;
+use EP_PayPal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Exception\PayPalApiException;
+use EP_PayPal\ApiClient\Factory\OrderFactory;
+use EP_PayPal\WcGateway\Gateway\PayUponInvoice\FraudNet;
+use EP_PayPal\WcGateway\Gateway\PayUponInvoice\PaymentSource;
 use WP_Error;
 
 /**

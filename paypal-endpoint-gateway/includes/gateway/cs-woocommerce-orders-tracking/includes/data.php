@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( !in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {
     return;
 }
-class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA {
+class EP_PayPal_Orders_Tracking_Data {
 	private $params;
 	private $default;
 	private $_wpnonce;
@@ -14,7 +14,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA {
 	protected static $carriers = array();
 
 	/**
-	 * CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA constructor.
+	 * EP_PayPal_Orders_Tracking_Data constructor.
 	 * Init setting
 	 */
 	public function __construct() {
@@ -214,7 +214,7 @@ Your sincerely',
 	/**
 	 * @param bool $new
 	 *
-	 * @return CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA
+	 * @return EP_PayPal_Orders_Tracking_Data
 	 */
 	public static function get_instance( $new = false ) {
 		if ( $new || null === self::$instance ) {
@@ -293,7 +293,7 @@ Your sincerely',
 	 */
 	public static function set( $name, $set_name = false, $prefix = 'woo-orders-tracking-' ) {
 		if ( is_array( $name ) ) {
-			return implode( ' ', array_map( array( 'CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA', 'set' ), $name ) );
+			return implode( ' ', array_map( array( 'EP_PayPal_Orders_Tracking_Data', 'set' ), $name ) );
 		} else {
 			if ( $set_name ) {
 				return esc_attr( str_replace( '-', '_', $prefix . $name ) );
@@ -2338,13 +2338,13 @@ Your sincerely',
 						$status = $track_data['data']['status'];
 						if ( ! count( $tracking_from_db ) ) {
 							VI_WOOCOMMERCE_ORDERS_TRACKING_TRACKINGMORE_TABLE::insert( $order_id, $tracking_number, $status, $carrier_slug, $carrier_name,
-								CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_shipping_country_by_order_id( $order_id ), '', '', '' );
+								EP_PayPal_Orders_Tracking_Data::get_shipping_country_by_order_id( $order_id ), '', '', '' );
 						}
 					} else {
 						if ( $track_data['code'] === 4016 ) {
 							if ( ! count( $tracking_from_db ) ) {
 								VI_WOOCOMMERCE_ORDERS_TRACKING_TRACKINGMORE_TABLE::insert( $order_id, $tracking_number, '', $carrier_slug, $carrier_name,
-									CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_shipping_country_by_order_id( $order_id ), '', '', '' );
+									EP_PayPal_Orders_Tracking_Data::get_shipping_country_by_order_id( $order_id ), '', '', '' );
 							}
 						} else {
 							$api_error = $track_data['data'];
@@ -2980,7 +2980,7 @@ Your sincerely',
 			if ( $add_to_paypal ) {
 				$transaction_id = $order->get_transaction_id();
 				$paypal_method  = $order->get_payment_method();
-				if ( $transaction_id && in_array( $paypal_method, CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL::get_supported_paypal_gateways() ) ) {
+				if ( $transaction_id && in_array( $paypal_method, EP_PayPal_Orders_Tracking_Admin::get_supported_paypal_gateways() ) ) {
 					$send_paypal = array(
 						array(
 							'trans_id'        => $transaction_id,
@@ -2989,9 +2989,9 @@ Your sincerely',
 							'order_id'        => $order_id,
 						)
 					);
-					$credentials = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL::get_api_credentials( $paypal_method );
+					$credentials = EP_PayPal_Orders_Tracking_Admin::get_api_credentials( $paypal_method );
 					if ( $credentials['id'] && $credentials['secret'] ) {
-						$add_paypal       = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL::add_tracking_number( $credentials['id'], $credentials['secret'], $send_paypal,
+						$add_paypal       = EP_PayPal_Orders_Tracking_Admin::add_tracking_number( $credentials['id'], $credentials['secret'], $send_paypal,
 							$credentials['sandbox'] );
 						$send_paypal_item = $send_paypal[0];
 						if ( $add_paypal['status'] === 'success' ) {

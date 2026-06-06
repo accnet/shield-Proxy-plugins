@@ -4,12 +4,12 @@
  *
  * @see https://developer.paypal.com/docs/api/orders/v2/#definition-capture_status
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Entity
+ * @package EP_PayPal\ApiClient\Entity
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Entity;
+namespace EP_PayPal\ApiClient\Entity;
 
 /**
  * Class CaptureStatus

@@ -330,7 +330,7 @@ jQuery(function ($) {
             } else {
                 var error = event.data.error || { code: 'unknown', message: 'Unknown error' };
                 window.pending_confirm_secret = null;
-                $.post('/?wc-ajax=cs_add_order_note', {
+                $.post('/?wc-ajax=ep_stripe_add_order_note', {
                     order_id: window.endpoint_stripe_order_id,
                     note: 'Stripe checkout error! Error code: ' + error.code + ', Message: ' + error.message + ' (attempt: ' + (window.cs_stripe_3ds_attempt_token || 'none') + ')',
                     security: ajax_object.cs_add_order_note_nonce

@@ -526,6 +526,9 @@ class Shield_Stripe_Endpoint_Client
         $path = isset($parts['path']) ? $parts['path'] : '/';
         $query = isset($parts['query']) && $parts['query'] !== '' ? ('?' . $parts['query']) : '';
         $request_uri = $path . $query;
+        if (strpos($request_uri, '/wp-json/') === 0) {
+            $request_uri = substr($request_uri, 8);
+        }
 
         $endpoint_id = get_option(self::opt('ENDPOINT_ID'), '');
         $manager_id = $endpoint_id ? ('mgr_' . $endpoint_id) : 'mgr_endpoint_stripe';

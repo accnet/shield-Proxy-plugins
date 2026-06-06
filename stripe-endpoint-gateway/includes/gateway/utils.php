@@ -8,8 +8,8 @@ if (! defined('ABSPATH')) {
  * Endpoint-mode signed request args helper.
  * Uses derivedKey from active node to sign requests to site1.
  */
-if (!function_exists('ep_endpoint_signed_request_args')) {
-    function ep_endpoint_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
+if (!function_exists('ep_stripe_endpoint_signed_request_args')) {
+    function ep_stripe_endpoint_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
         if (!class_exists('Shield_Stripe_Endpoint_Client')) {
             return $args;
         }
@@ -45,9 +45,13 @@ if (!function_exists('ep_endpoint_signed_request_args')) {
         return $args;
     }
 }
-// Also provide backwards-compat shim for shield_proxy_signed_request_args
-if (!function_exists('shield_proxy_signed_request_args')) {
-    function shield_proxy_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
+// Also provide backwards-compat shim for ep_stripe_signed_request_args
+if (!function_exists('ep_stripe_signed_request_args')) {
+    function ep_stripe_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
+        if (!isset($args['_shield_gateway'])) {
+            return ep_stripe_endpoint_signed_request_args($proxyOrUrl, $method, $url, $args, $bodyRaw);
+        }
+
         $gateway = '';
         if (isset($args['_shield_gateway'])) {
             $gateway = (string) $args['_shield_gateway'];
@@ -138,15 +142,15 @@ defined('EP_ST_LINK_EXPRESS_ENABLED') || define('EP_ST_LINK_EXPRESS_ENABLED', 'l
 defined('OPT_WOOTIFY_STRIPE_INTENT_CAPTURE') || define('OPT_WOOTIFY_STRIPE_INTENT_CAPTURE', 'OPT_WOOTIFY_STRIPE_INTENT_CAPTURE');
 defined('OPT_WOOTIFY_STRIPE_INTENT_AUTHORIZE') || define('OPT_WOOTIFY_STRIPE_INTENT_AUTHORIZE', 'OPT_WOOTIFY_STRIPE_INTENT_AUTHORIZE');
 
-defined('METAKEY_EP_STRIPE_INTENT_AUTHORIZED') || define('METAKEY_EP_STRIPE_INTENT_AUTHORIZED', '_METAKEY_WOOTIFY_STRIPE_INTENT_CAPTURED');
-defined('METAKEY_EP_STRIPE_PROXY_URL') || define('METAKEY_EP_STRIPE_PROXY_URL', '_endpoint_stripe_proxy_url');
-defined('METAKEY_STRIPE_PROXY_ID') || define('METAKEY_STRIPE_PROXY_ID', '_endpoint_stripe_proxy_id');
+defined('METAKEY_EP_STRIPE_INTENT_AUTHORIZED') || define('METAKEY_EP_STRIPE_INTENT_AUTHORIZED', '_ep_stripe_intent_authorized');
+defined('METAKEY_EP_STRIPE_PROXY_URL') || define('METAKEY_EP_STRIPE_PROXY_URL', '_ep_stripe_proxy_url');
+defined('METAKEY_EP_STRIPE_PROXY_ID') || define('METAKEY_EP_STRIPE_PROXY_ID', '_ep_stripe_proxy_id');
 defined('ROTATION_METHOD_TIME') || define('ROTATION_METHOD_TIME', 'by_time');
 defined('ROTATION_METHOD_AMOUNT') || define('ROTATION_METHOD_AMOUNT', 'by_volume');
 
-defined('METAKEY_CS_STRIPE_FEE') || define('METAKEY_CS_STRIPE_FEE', '_cs_stripe_fee');
-defined('METAKEY_CS_STRIPE_PAYOUT') || define('METAKEY_CS_STRIPE_PAYOUT', '_cs_stripe_payout');
-defined('METAKEY_CS_STRIPE_CURRENCY') || define('METAKEY_CS_STRIPE_CURRENCY', '_cs_stripe_currency');
+defined('METAKEY_EP_STRIPE_FEE') || define('METAKEY_EP_STRIPE_FEE', '_ep_stripe_fee');
+defined('METAKEY_EP_STRIPE_PAYOUT') || define('METAKEY_EP_STRIPE_PAYOUT', '_ep_stripe_payout');
+defined('METAKEY_EP_STRIPE_CURRENCY') || define('METAKEY_EP_STRIPE_CURRENCY', '_ep_stripe_currency');
 
 // true: order currency
 // false: stripe currency
@@ -159,7 +163,7 @@ defined('OPT_WOOTIFY_STRIPE_ACTIVATED_PROXY') || define('OPT_WOOTIFY_STRIPE_ACTI
 defined('OPT_WOOTIFY_STRIPE_CURRENT_ROTATION_VALUE') || define('OPT_WOOTIFY_STRIPE_CURRENT_ROTATION_VALUE', EP_ST_ROTATION_VALUE);
 defined('OPT_WOOTIFY_STRIPE_UNUSED_PROXIES') || define('OPT_WOOTIFY_STRIPE_UNUSED_PROXIES', EP_ST_UNUSED_NODES);
 
-function resetPaidAmountIfNeedStripe() {
+function ep_stripe_reset_paid_amount_if_needed() {
     $proxies = get_option(EP_ST_NODES, []);
     if (empty($proxies)) {
         return [];
@@ -170,12 +174,12 @@ function resetPaidAmountIfNeedStripe() {
     $lastTimeReset = get_option(OPT_WOOTIFY_STRIPE_LAST_TIME_RESET_PAID_AMOUNT, null);
     // Reset
     if (empty($lastTimeReset) || date('Y-m-d') > $lastTimeReset) {
-        return resetPaidAmountStripe($proxies);
+        return ep_stripe_reset_paid_amount($proxies);
     }
     return $proxies;
 }
 
-function findActivatedProxyDataByIdStripe($proxies, $activatedProxyId) {
+function ep_stripe_find_activated_proxy_data_by_id($proxies, $activatedProxyId) {
     foreach ($proxies as $proxy) {
         $proxyId = $proxy['nodeId'] ?? $proxy['id'] ?? null;
         if ($proxyId === $activatedProxyId) {
@@ -185,18 +189,18 @@ function findActivatedProxyDataByIdStripe($proxies, $activatedProxyId) {
     return null;
 }
 
-function getNextProxyAmountRotationStripe($orderTotal) {
+function ep_stripe_get_next_proxy_amount_rotation($orderTotal) {
     $proxies = get_option(EP_ST_NODES, []);
     if (empty($proxies)) {
         return null;
     }
     $activatedProxy = get_option(EP_ST_ACTIVE_NODE, null);
     if (empty($activatedProxy)) {
-        csStripeErrorLog("Activated proxy not found! Use the first proxy of rotation list");
+        ep_stripe_error_log("Activated proxy not found! Use the first proxy of rotation list");
         $activatedProxy = $proxies[0];
     }
     $activatedProxyId = $activatedProxy['nodeId'] ?? $activatedProxy['id'] ?? null;
-    $activatedProxy = findActivatedProxyDataByIdStripe($proxies, $activatedProxyId);
+    $activatedProxy = ep_stripe_find_activated_proxy_data_by_id($proxies, $activatedProxyId);
 
     // Need to rotate proxy
     $isCurrentProxyMatched = false;
@@ -223,20 +227,20 @@ function getNextProxyAmountRotationStripe($orderTotal) {
     return null;
 }
 
-function performProxyAmountRotationStripe($orderTotal) {
-    $proxies = resetPaidAmountIfNeedStripe();
+function ep_stripe_perform_proxy_amount_rotation($orderTotal) {
+    $proxies = ep_stripe_reset_paid_amount_if_needed();
     if (empty($proxies)) {
         return null;
     }
     $activatedProxy = get_option(EP_ST_ACTIVE_NODE, null);
     if (empty($activatedProxy)) {
-        csStripeErrorLog("Activated proxy not found! Use the first proxy of rotation list");
+        ep_stripe_error_log("Activated proxy not found! Use the first proxy of rotation list");
         $activatedProxy = $proxies[0];
         update_option(EP_ST_ACTIVE_NODE, $activatedProxy, true);
-        logStripeRotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
+        ep_stripe_log_rotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
     }
     $activatedProxyId = $activatedProxy['nodeId'] ?? $activatedProxy['id'] ?? null;
-    $activatedProxy = findActivatedProxyDataByIdStripe($proxies, $activatedProxyId);
+    $activatedProxy = ep_stripe_find_activated_proxy_data_by_id($proxies, $activatedProxyId);
 
     // Need to rotate proxy
     $isCurrentProxyMatched = false;
@@ -252,7 +256,7 @@ function performProxyAmountRotationStripe($orderTotal) {
         if ($isCurrentProxyMatched && doubleval($proxyVolumeUsed) + doubleval($orderTotal) < doubleval($proxyVolumeLimit)) {
             $activatedProxy = $proxy;
             update_option(EP_ST_ACTIVE_NODE, $activatedProxy, true);
-            logStripeRotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
+            ep_stripe_log_rotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
             return $activatedProxy;
         }
     }
@@ -262,23 +266,23 @@ function performProxyAmountRotationStripe($orderTotal) {
         if (doubleval($proxyVolumeUsed) + doubleval($orderTotal) < doubleval($proxyVolumeLimit)) {
             $activatedProxy = $proxy;
             update_option(EP_ST_ACTIVE_NODE, $activatedProxy, true);
-            logStripeRotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
+            ep_stripe_log_rotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto");
             return $activatedProxy;
         }
     }
 
     // All proxies exhausted — force reset paid_amount and restart from first proxy.
-    $proxies = resetPaidAmountStripe();
+    $proxies = ep_stripe_reset_paid_amount();
     if (!empty($proxies)) {
         $activatedProxy = $proxies[0];
         update_option(EP_ST_ACTIVE_NODE, $activatedProxy, true);
-        logStripeRotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Reset+Auto");
+        ep_stripe_log_rotation(ROTATION_METHOD_AMOUNT, $activatedProxy, "Reset+Auto");
         return $activatedProxy;
     }
     return null;
 }
 
-function resetPaidAmountStripe($proxies = null) {
+function ep_stripe_reset_paid_amount($proxies = null) {
     if (empty($proxies)) {
         $proxies = get_option(EP_ST_NODES, []);
     }
@@ -319,12 +323,12 @@ function resetPaidAmountStripe($proxies = null) {
     return $newProxies;
 }
 
-function logStripeRotation($rotationMethod, $proxy, $type) {
+function ep_stripe_log_rotation($rotationMethod, $proxy, $type) {
     $WOOTIFY_log_dir = wp_get_upload_dir()["basedir"] . '/wootify';
     if (!is_dir($WOOTIFY_log_dir)) {
         mkdir($WOOTIFY_log_dir, 0777, true);
     }
-    $logFilePath = $WOOTIFY_log_dir . '/' . getStripeLogFileName($rotationMethod);
+    $logFilePath = $WOOTIFY_log_dir . '/' . ep_stripe_get_log_file_name($rotationMethod);
     $currentDateTime             = date('Y-m-d H:i:s');
     $proxyVolumeLimit = $proxy['volumeLimit'] ?? $proxy['amount'] ?? 0;
     $proxyVolumeUsed = $proxy['volumeUsed'] ?? $proxy['paid_amount'] ?? 0;
@@ -336,7 +340,7 @@ function logStripeRotation($rotationMethod, $proxy, $type) {
     fclose($fp);
 }
 
-function getStripeLogFileName($rotationMethod) {
+function ep_stripe_get_log_file_name($rotationMethod) {
     if ($rotationMethod === ROTATION_METHOD_TIME) {
         return 'endpoint_stripe_rotation_time_log.txt';
     } else if ($rotationMethod === ROTATION_METHOD_AMOUNT) {
@@ -344,7 +348,7 @@ function getStripeLogFileName($rotationMethod) {
     }
 }
 
-function loadStripeLogs() {
+function ep_stripe_load_logs() {
     $WOOTIFY_log_dir = wp_get_upload_dir()["basedir"] . '/wootify';
     $logFilePath = $WOOTIFY_log_dir . '/stripe_rotation_log.txt';
     if (file_exists($logFilePath)) {
@@ -355,11 +359,11 @@ function loadStripeLogs() {
     return $array;
 }
 
-function isEnabledAmountRotationStripe() {
+function ep_stripe_is_enabled_amount_rotation() {
     return ROTATION_METHOD_AMOUNT === get_option(EP_ST_ROTATION_METHOD, ROTATION_METHOD_TIME);
 }
 
-function updateRotationAmountStripe($processedProxyId, $orderTotal) {
+function ep_stripe_update_rotation_amount($processedProxyId, $orderTotal) {
     $proxies = get_option(EP_ST_NODES, []);
     foreach ($proxies as $key => $proxy) {
         $proxyId = $proxy['nodeId'] ?? $proxy['id'] ?? null;
@@ -385,8 +389,8 @@ function updateRotationAmountStripe($processedProxyId, $orderTotal) {
     return $result;
 }
 
-function hasPayableProxyStripe($cartTotal) {
-    $proxies = resetPaidAmountIfNeedStripe();
+function ep_stripe_has_payable_proxy($cartTotal) {
+    $proxies = ep_stripe_reset_paid_amount_if_needed();
     if (empty($proxies)) {
         return false;
     }
@@ -401,9 +405,9 @@ function hasPayableProxyStripe($cartTotal) {
     return false;
 }
 
-function csStripeErrorLog($data, $message = '') {
+function ep_stripe_error_log($data, $message = '') {
     $trace = debug_backtrace();
-    $dataLogString = csStripeHandleDataLog($data, $message)
+    $dataLogString = ep_stripe_handle_data_log($data, $message)
         . print_r([$trace[1]['class'], $trace[1]['function'], $trace[1]['args']], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
@@ -412,9 +416,9 @@ function csStripeErrorLog($data, $message = '') {
     }
 }
 
-function csStripeDebugLog($data, $message = '') {
+function ep_stripe_debug_log($data, $message = '') {
     $trace = debug_backtrace();
-    $dataLogString = csStripeHandleDataLog($data, $message)
+    $dataLogString = ep_stripe_handle_data_log($data, $message)
         . print_r([$trace[1]['class'], $trace[1]['function'], $trace[1]['args']], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
@@ -423,13 +427,13 @@ function csStripeDebugLog($data, $message = '') {
     }
 }
 
-function csStripeGenerateTraceId() {
+function ep_stripe_generate_trace_id() {
     return function_exists('wp_generate_uuid4')
         ? wp_generate_uuid4()
         : uniqid('stripe-trace-', true);
 }
 
-function csStripeHandleDataLog($data, $message = '') {
+function ep_stripe_handle_data_log($data, $message = '') {
     try {
         if (is_array($data) || is_object($data)) {
             $dataLog = print_r($data, true);
@@ -443,7 +447,7 @@ function csStripeHandleDataLog($data, $message = '') {
         . $dataLog;
 }
 
-function stripeMoveToUnusedProxyIds($proxyIds) {
+function ep_stripe_move_to_unused_proxy_ids($proxyIds) {
     $proxies        = get_option(EP_ST_NODES, []);
     if (empty($proxies)) {
         $proxies = [];
@@ -466,16 +470,16 @@ function stripeMoveToUnusedProxyIds($proxyIds) {
     return $isSuccess1 && $isSuccess2;
 }
 
-function setNextProxyByTimeRotation() {
+function ep_stripe_set_next_proxy_by_time_rotation() {
     $proxies = get_option(EP_ST_NODES, []);
     $activatedProxy = get_option(EP_ST_ACTIVE_NODE, null);
     if (empty($activatedProxy)) {
-        csStripeErrorLog("Activated proxy not found! Use the first proxy of rotation list[2]");
+        ep_stripe_error_log("Activated proxy not found! Use the first proxy of rotation list[2]");
         $activatedProxy = $proxies[0];
         update_option(EP_ST_ACTIVE_NODE, $activatedProxy, true);
     }
     $activatedProxyId = $activatedProxy['nodeId'] ?? $activatedProxy['id'] ?? null;
-    $activatedProxy = findActivatedProxyDataByIdStripe($proxies, $activatedProxyId);
+    $activatedProxy = ep_stripe_find_activated_proxy_data_by_id($proxies, $activatedProxyId);
 
     // Need to rotate proxy
     $isCurrentProxyMatched = false;
@@ -502,15 +506,15 @@ function setNextProxyByTimeRotation() {
 }
 
 
-function csStripeSaveTransactionId(WC_Order $order, $transactionId) {
+function ep_stripe_save_transaction_id(WC_Order $order, $transactionId) {
     $order->set_transaction_id($transactionId);
-    $order->update_meta_data('METAKEY_CS_TRANSACTION_ID', $transactionId);
+    $order->update_meta_data('_ep_stripe_transaction_id', $transactionId);
     $order->save();
 }
-function csStripeGetTransactionId(WC_Order $order) {
+function ep_stripe_get_transaction_id(WC_Order $order) {
     $id = $order->get_transaction_id();
     if (empty($id)) {
-        $id = $order->get_meta('METAKEY_CS_TRANSACTION_ID');
+        $id = $order->get_meta('_ep_stripe_transaction_id');
     }
     return $id;
 }

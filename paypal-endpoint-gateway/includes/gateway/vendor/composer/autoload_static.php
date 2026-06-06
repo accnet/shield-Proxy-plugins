@@ -4,23 +4,26 @@
 
 namespace Composer\Autoload;
 
-class ComposerStaticInit018d6f4c8fbd800ed0b49882a60994aa
+class ComposerStaticInitEpPaypal018d6f4c8fbd800ed0b49882a60994aa
 {
     public static $prefixLengthsPsr4 = array (
-        'W' => 
+        'W' =>
         array (
-            'WooCommerce\\WootifyPaypal\\ApiClient\\' => 34,
             'Wikimedia\\Composer\\Merge\\V2\\' => 28,
         ),
-        'P' => 
+        'E' =>
+        array (
+            'EP_PayPal\\ApiClient\\' => 20,
+        ),
+        'P' =>
         array (
             'Psr\\Container\\' => 14,
         ),
-        'I' => 
+        'I' =>
         array (
             'Interop\\Container\\' => 18,
         ),
-        'D' => 
+        'D' =>
         array (
             'Dhii\\Versions\\' => 14,
             'Dhii\\Validation\\' => 16,
@@ -32,43 +35,43 @@ class ComposerStaticInit018d6f4c8fbd800ed0b49882a60994aa
     );
 
     public static $prefixDirsPsr4 = array (
-        'WooCommerce\\WootifyPaypal\\ApiClient\\' => 
+        'EP_PayPal\\ApiClient\\' =>
         array (
             0 => __DIR__ . '/../..' . '/modules/ppcp-api-client/src',
         ),
-        'Wikimedia\\Composer\\Merge\\V2\\' => 
+        'Wikimedia\\Composer\\Merge\\V2\\' =>
         array (
             0 => __DIR__ . '/..' . '/wikimedia/composer-merge-plugin/src',
         ),
-        'Psr\\Container\\' => 
+        'Psr\\Container\\' =>
         array (
             0 => __DIR__ . '/..' . '/psr/container/src',
         ),
-        'Interop\\Container\\' => 
+        'Interop\\Container\\' =>
         array (
             0 => __DIR__ . '/..' . '/container-interop/service-provider/src',
         ),
-        'Dhii\\Versions\\' => 
+        'Dhii\\Versions\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/versions/src',
         ),
-        'Dhii\\Validation\\' => 
+        'Dhii\\Validation\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/validation-interface/src',
         ),
-        'Dhii\\Package\\' => 
+        'Dhii\\Package\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/package-interface/src',
         ),
-        'Dhii\\Modular\\Module\\' => 
+        'Dhii\\Modular\\Module\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/module-interface/src',
         ),
-        'Dhii\\Container\\' => 
+        'Dhii\\Container\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/containers/src',
         ),
-        'Dhii\\Collection\\' => 
+        'Dhii\\Collection\\' =>
         array (
             0 => __DIR__ . '/..' . '/dhii/collections-interface/src',
         ),
@@ -77,8 +80,8 @@ class ComposerStaticInit018d6f4c8fbd800ed0b49882a60994aa
     public static function getInitializer(ClassLoader $loader)
     {
         return \Closure::bind(function () use ($loader) {
-            $loader->prefixLengthsPsr4 = ComposerStaticInit018d6f4c8fbd800ed0b49882a60994aa::$prefixLengthsPsr4;
-            $loader->prefixDirsPsr4 = ComposerStaticInit018d6f4c8fbd800ed0b49882a60994aa::$prefixDirsPsr4;
+            $loader->prefixLengthsPsr4 = ComposerStaticInitEpPaypal018d6f4c8fbd800ed0b49882a60994aa::$prefixLengthsPsr4;
+            $loader->prefixDirsPsr4 = ComposerStaticInitEpPaypal018d6f4c8fbd800ed0b49882a60994aa::$prefixDirsPsr4;
 
         }, null, ClassLoader::class);
     }

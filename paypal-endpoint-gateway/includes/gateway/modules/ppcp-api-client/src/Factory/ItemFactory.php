@@ -3,17 +3,17 @@
 /**
  * The Item factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use WC_Product;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Item;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Money;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\Item;
+use EP_PayPal\ApiClient\Entity\Money;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class ItemFactory
@@ -150,7 +150,7 @@ class ItemFactory {
 	 * @return array|false|mixed|string|string[]
 	 */
 	private function getProductTitle($productTitle, $orderId, ?\WC_Order_Item_Product $item = null) {
-		return \cs_pp_resolve_product_title($productTitle, $orderId, $item);
+		return \ep_paypal_resolve_product_title($productTitle, $orderId, $item);
 	}
 
 	/**

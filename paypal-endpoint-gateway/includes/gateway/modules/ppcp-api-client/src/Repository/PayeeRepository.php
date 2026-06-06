@@ -2,14 +2,14 @@
 /**
  * The Payee Repository.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Repository
+ * @package EP_PayPal\ApiClient\Repository
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Repository;
+namespace EP_PayPal\ApiClient\Repository;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Payee;
+use EP_PayPal\ApiClient\Entity\Payee;
 
 /**
  * Class PayeeRepository

@@ -2,17 +2,17 @@
 /**
  * The PatchCollection factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Patch;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PatchCollection;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Entity\Patch;
+use EP_PayPal\ApiClient\Entity\PatchCollection;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
 
 /**
  * Class PatchCollectionFactory

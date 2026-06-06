@@ -2,15 +2,15 @@
 /**
  * The FraudProcessorResponseFactory Factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use stdClass;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\FraudProcessorResponse;
+use EP_PayPal\ApiClient\Entity\FraudProcessorResponse;
 
 /**
  * Class FraudProcessorResponseFactory

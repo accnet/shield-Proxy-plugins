@@ -2,12 +2,12 @@
 /**
  * The modules Not Found exception.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Exception
+ * @package EP_PayPal\ApiClient\Exception
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Exception;
+namespace EP_PayPal\ApiClient\Exception;
 
 use Psr\Container\NotFoundExceptionInterface;
 use Exception;

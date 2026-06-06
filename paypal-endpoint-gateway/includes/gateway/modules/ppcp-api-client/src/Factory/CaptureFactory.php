@@ -2,16 +2,16 @@
 /**
  * The capture factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare( strict_types=1 );
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Capture;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\CaptureStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\CaptureStatusDetails;
+use EP_PayPal\ApiClient\Entity\Capture;
+use EP_PayPal\ApiClient\Entity\CaptureStatus;
+use EP_PayPal\ApiClient\Entity\CaptureStatusDetails;
 
 /**
  * Class CaptureFactory

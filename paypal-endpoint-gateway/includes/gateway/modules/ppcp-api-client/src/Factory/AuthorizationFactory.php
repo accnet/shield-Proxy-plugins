@@ -2,17 +2,17 @@
 /**
  * The Authorization factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Authorization;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\AuthorizationStatus;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\AuthorizationStatusDetails;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\Authorization;
+use EP_PayPal\ApiClient\Entity\AuthorizationStatus;
+use EP_PayPal\ApiClient\Entity\AuthorizationStatusDetails;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class AuthorizationFactory

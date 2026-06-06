@@ -2,12 +2,12 @@
 /**
  * The info about fees and amount that will be received by the seller.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Entity
+ * @package EP_PayPal\ApiClient\Entity
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Entity;
+namespace EP_PayPal\ApiClient\Entity;
 
 /**
  * Class SellerReceivableBreakdown

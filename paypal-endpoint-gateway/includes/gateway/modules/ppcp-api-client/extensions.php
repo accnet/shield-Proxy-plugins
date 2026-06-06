@@ -2,11 +2,11 @@
 /**
  * The extensions of the api client module.
  *
- * @package  WooCommerce\WootifyPaypal\ApiClient
+ * @package  EP_PayPal\ApiClient
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient;
+namespace EP_PayPal\ApiClient;
 
 return array();

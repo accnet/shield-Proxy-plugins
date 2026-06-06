@@ -2,12 +2,12 @@
 /**
  * The RequestTrait wraps the wp_remote_get functionality for the API client.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Endpoint
+ * @package EP_PayPal\ApiClient\Endpoint
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Endpoint;
+namespace EP_PayPal\ApiClient\Endpoint;
 
 use WP_Error;
 

@@ -2,14 +2,14 @@
 /**
  * The ApplicationContext factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\ApplicationContext;
+use EP_PayPal\ApiClient\Entity\ApplicationContext;
 
 /**
  * Class ApplicationContextFactory

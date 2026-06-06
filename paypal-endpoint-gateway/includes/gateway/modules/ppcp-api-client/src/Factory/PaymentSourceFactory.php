@@ -2,16 +2,16 @@
 /**
  * The PaymentSource factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\CardAuthenticationResult;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentSource;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentSourceCard;
+use EP_PayPal\ApiClient\Entity\CardAuthenticationResult;
+use EP_PayPal\ApiClient\Entity\PaymentSource;
+use EP_PayPal\ApiClient\Entity\PaymentSourceCard;
 
 /**
  * Class PaymentSourceFactory

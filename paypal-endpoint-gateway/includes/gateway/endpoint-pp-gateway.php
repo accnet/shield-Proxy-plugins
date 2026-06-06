@@ -422,9 +422,9 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
         }
         if(isset($_GET['pay_for_order']) && get_query_var('order-pay')) {
             $this->WOOTIFY_pp_generate_input_order();                        
-            $purchaseUnits = get_purchase_unit_from_order(wc_get_order(get_query_var('order-pay')));
+            $purchaseUnits = ep_paypal_get_purchase_unit_from_order(wc_get_order(get_query_var('order-pay')));
         } else {
-            $purchaseUnits = get_purchase_unit_from_cart(WC()->cart);
+            $purchaseUnits = ep_paypal_get_purchase_unit_from_cart(WC()->cart);
         }
         if ($this->get_option('paypal_button') === 'checkout') {
             ?>
@@ -465,7 +465,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             $params['disable_credit_card_express'] = 1;
         }
 
-        $proxyFullUrl = cs_pp_build_proxy_url($nextProxyUrl, $params);
+        $proxyFullUrl = ep_paypal_build_proxy_url($nextProxyUrl, $params);
         ?>
             <div id="wootify-paypal-credit-form-container" style="display:none">
                 <iframe id="payment-paypal-area" referrerpolicy="no-referrer" src="<?= esc_url($proxyFullUrl) ?>" height="130" frameBorder="0" style="width: 100%"></iframe>
@@ -511,15 +511,15 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             return;
         }
 
-        wp_register_style( 'WOOTIFY_styles', plugins_url( 'assets/css/styles.css', __FILE__ ) . '?v=' . uniqid(), []);
-        wp_enqueue_style( 'WOOTIFY_styles' );
+        wp_register_style( 'ep_paypal_styles', plugins_url( 'assets/css/styles.css', __FILE__ ) . '?v=' . uniqid(), []);
+        wp_enqueue_style( 'ep_paypal_styles' );
 
                 
-        wp_register_script( 'WOOTIFY_js_sha1', plugins_url( '/assets/js/sha1.js', __FILE__ ) . '?v=' . uniqid(), []);
-        wp_enqueue_script( 'WOOTIFY_js_sha1' );
-        
-        wp_register_script( 'WOOTIFY_js', plugins_url( '/assets/js/checkout_hook.js', __FILE__ ) . '?v=' . uniqid(), [ 'jquery' ] );
-        wp_enqueue_script( 'WOOTIFY_js' );
+        wp_register_script( 'ep_paypal_js_sha1', plugins_url( '/assets/js/sha1.js', __FILE__ ) . '?v=' . uniqid(), []);
+        wp_enqueue_script( 'ep_paypal_js_sha1' );
+
+        wp_register_script( 'ep_paypal_js_checkout', plugins_url( '/assets/js/checkout_hook.js', __FILE__ ) . '?v=' . uniqid(), [ 'jquery' ] );
+        wp_enqueue_script( 'ep_paypal_js_checkout' );
     }
 
     /*
@@ -635,7 +635,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                 "total"    => $orderData["sub_total"]
             ]
         ];
-        $purchaseUnits = get_purchase_unit_from_order($order);
+        $purchaseUnits = ep_paypal_get_purchase_unit_from_order($order);
         if ($this->get_option('not_send_bill_address_to_paypal') === 'yes') {
             unset($purchaseUnits['shipping']['address']);
         }
@@ -664,9 +664,9 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             }
             $idempotencyKey = 'pp-capture-' . $order_id . '-' . ($_POST['wootify-paypal-payment-order-id'] ?? '');
             $payloadJson = json_encode([
-                'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
+                'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($order),
             ]);
-            $proxyProcess = wp_remote_post($urlCheckout, shield_proxy_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
+            $proxyProcess = wp_remote_post($urlCheckout, ep_paypal_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
                  'sslverify' => false,
                  'timeout' => 300 ,
                 'headers' => [
@@ -676,7 +676,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                 'body' => $payloadJson,
             ], $payloadJson));
             if (is_wp_error($proxyProcess)) {
-                csPaypalErrorLog($proxyProcess, "pp request checkout error[10]");
+                ep_paypal_error_log($proxyProcess, "pp request checkout error[10]");
             }
             $order->add_order_note(sprintf(__('Paypal handle order at proxy url %s', 'wootify'),
                 $getActivateProxyUrl
@@ -690,7 +690,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                     $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
                  }
             }
-            $order->update_meta_data('_cs_paypal_checkout_page', 'checkout');
+            $order->update_meta_data('_ep_paypal_checkout_page', 'checkout');
             $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
             $order->save_meta_data();
             if ($data->status === 'success' && isset($ppPayment)) {
@@ -722,7 +722,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                          $order->get_currency()
                      );
                  }
-                 csPaypalSaveTransactionId($order, $ppPayment->id);
+                 ep_paypal_save_transaction_id($order, $ppPayment->id);
                  $order->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_NOT_SYNCED);
                  $order->save_meta_data();
 
@@ -745,21 +745,21 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                         $getActivateProxyUrl,
                         "Customer's zipcode is blacklisted"
                     ));
-                    csPaypalSendMailOrderBlacklisted($order->get_id());
+                    ep_paypal_send_mail_order_blacklisted($order->get_id());
                     wc_add_notice('PAYPAL_ACCOUNT_RESTRICTED, Please contact the merchant for more information.', 'error');
                 }  else if( $data->code === 'customer_email_not_allow') {
                     $order->add_order_note(sprintf(__('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                         $getActivateProxyUrl,
                         "Customer's email is blacklisted"
                     ));
-                    csPaypalSendMailOrderBlacklisted($order->get_id());
+                    ep_paypal_send_mail_order_blacklisted($order->get_id());
                     wc_add_notice('We cannot process your payment right now. Please try again with another payment method.', 'error');
                 }  else if( $data->code === 'states_cities_not_allow') {
                     $order->add_order_note(sprintf(__('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                         $getActivateProxyUrl,
                         "Customer's State and City is blacklisted"
                     ));
-                    csPaypalSendMailOrderBlacklisted($order->get_id());
+                    ep_paypal_send_mail_order_blacklisted($order->get_id());
                     wc_add_notice('Sorry, Your selected products are not available to purchase due to our policy violation.', 'error');
                 } else if( $data->code === 'order_total_not_allow') {
                     $order->add_order_note(sprintf(__('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
@@ -781,13 +781,13 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                     $order->update_status('failed');
                     wc_add_notice('We cannot process your PayPal payment now, please try again with another method.', 'error');
                 }
-                csPaypalErrorLog($responseBody, 'Checkout error![0]');
+                ep_paypal_error_log($responseBody, 'Checkout error![0]');
                 return false;
             }
         } else {
             unset($purchaseUnits['items']);
             $orderData['purchase_units'] = $purchaseUnits;
-            $customerIp = csPaypalGetClientIP();
+            $customerIp = ep_paypal_get_client_ip();
             $proxyProcess = wp_remote_post($getActivateProxyUrl
                 . "?wootify-process=1&request_type=get_redirect_url&not_send_bill_address_to_paypal="
                 . $this->not_send_bill_address_to_paypal
@@ -804,11 +804,11 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                         'Content-Type' => 'application/json',
                     ],
                     'body' => json_encode([
-                        'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
+                        'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($order),
                     ])
                 ]);
             if (is_wp_error($proxyProcess)) {
-                csPaypalErrorLog($proxyProcess, "error[3]");
+                ep_paypal_error_log($proxyProcess, "error[3]");
                 wc_add_notice(__('Your PayPal checkout session has expired. Please check out again.[0]', 'wootify'), 'error');
                 $order->add_order_note(sprintf(__('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                     $getActivateProxyUrl,
@@ -821,7 +821,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             $responseBody = wp_remote_retrieve_body($proxyProcess);
             $data = json_decode($responseBody);
             if($data->status === 'failed') {
-                csPaypalErrorLog($responseBody, 'Checkout error![4]');
+                ep_paypal_error_log($responseBody, 'Checkout error![4]');
                 wc_add_notice(__('Your PayPal checkout session has expired. Please check out again.[10]', 'wootify'), 'error');
                 $order->add_order_note(sprintf(__('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                     $getActivateProxyUrl,
@@ -835,12 +835,12 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                             Shield_PayPal_Endpoint_Client::report_transaction($activeNode['shieldId'], 0, $order->get_id(), $order->get_currency());
                         }
                     } else {
-                        if (isEnabledAmountRotation()) {
-                            performProxyAmountRotation($activatedProxy, 0);
+                        if (ep_paypal_is_enabled_amount_rotation()) {
+                            ep_paypal_perform_proxy_amount_rotation($activatedProxy, 0);
                         } else {
-                            performProxyByTimeRotation($activatedProxy);
+                            ep_paypal_perform_proxy_by_time_rotation($activatedProxy);
                         }
-                        moveToUnusedProxyIdsRestrictAccount([$activatedProxy['id']]);
+                        ep_paypal_move_to_unused_proxy_ids_restrict_account([$activatedProxy['id']]);
                     }
                 }
                 return false;
@@ -880,7 +880,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
 
             return true;
 
-        } catch ( WOOTIFY_PayPal_API_Exception $e ) {
+        } catch ( EP_PayPal_API_Exception $e ) {
             if ( isset( $e->response->message ) ) {
                 return new WP_Error( 'paypal_refund_error', $e->response->message );
             } else if ( isset( $e->response->error_description ) ) {
@@ -893,11 +893,11 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
 
     private function refund_order( $order, $order_id, $amount, $reason, $currency ) {
         // add refund params
-        $params['TRANSACTIONID'] = csPaypalGetTransactionId($order);
+        $params['TRANSACTIONID'] = ep_paypal_get_transaction_id($order);
         $params['AMT']           = $amount;
         $params['CURRENCYCODE']  = $currency;
         $params['NOTE']          = $reason;
-        $params['cs_order_detail'] = getCsPaypalOrderDetailFromWcOrder($order);
+        $params['cs_order_detail'] = ep_paypal_get_order_detail_from_wc_order($order);
         //Get the proxy url when this order was made
 
         $proxyUrl = wc_get_order($order_id)->get_meta( METAKEY_EP_PAYPAL_PROXY_URL );
@@ -905,13 +905,13 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
         // do API call
         $url = $proxyUrl . "?wootify-pp-refund=1&order_id=$order_id&" . http_build_query( $params );
 
-        $request = wp_remote_get($url, shield_proxy_signed_request_args($proxyUrl, 'GET', $url, [
+        $request = wp_remote_get($url, ep_paypal_signed_request_args($proxyUrl, 'GET', $url, [
             'sslverify' => false,
             'timeout' => 300,
         ]));
         if (is_wp_error($request)) {
             $order->add_order_note(sprintf(__('Failed refund by PayPal! Proxy %s', 'wootify-paypal-gateway'), $proxyUrl));
-            throw new WOOTIFY_PayPal_API_Exception($request->get_error_message());
+            throw new EP_PayPal_API_Exception($request->get_error_message());
         }
 
         $body = wp_remote_retrieve_body($request);
@@ -920,7 +920,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
 //            if (is_wp_error($request)) {
 //                wc_add_notice('There is an error when process this payment, please contact us for more support or you can try to use Paypal!', 'error');
 //                $order->add_order_note(sprintf(__('Failed refund by Paypal! Debug proxy %s', 'wootify-paypal-gateway'), $url));
-//                throw new WOOTIFY_PayPal_API_Exception($data);
+//                throw new EP_PayPal_API_Exception($data);
 //            }
 
         // Backward compatibility
@@ -941,7 +941,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             return $response->data->id;
         } else {
             $order->add_order_note( sprintf( __( 'Failed refund by PayPal! Proxy %s', 'wootify-paypal-gateway' ), $proxyUrl ) );
-            throw new WOOTIFY_PayPal_API_Exception( $response );
+            throw new EP_PayPal_API_Exception( $response );
         }
     }
 
@@ -979,7 +979,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
     }
 
     public function getProductTitle( $productTitle , $orderId) {
-        return cs_pp_resolve_product_title($productTitle, $orderId, null, [
+        return ep_paypal_resolve_product_title($productTitle, $orderId, null, [
             'product_title_setting' => $this->productTitleSetting,
             'user_define_product_title' => $this->userDefineProductTitle,
         ]);
@@ -1190,7 +1190,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             $wc_order->update_status('failed', 'Order failed');
             return false;
         }
-        $authId = csPaypalGetTransactionId($wc_order);
+        $authId = ep_paypal_get_transaction_id($wc_order);
 
         $params = [];
         $params["payment_id"] = $authId;
@@ -1203,11 +1203,11 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                 'Content-Type' => 'application/json',
             ],
             'body' => json_encode([
-                'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($wc_order),
+                'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($wc_order),
             ])
         ] );
         if (is_wp_error($request)) {
-            csPaypalErrorLog($request, "Capture request error![5]");
+            ep_paypal_error_log($request, "Capture request error![5]");
             $wc_order->add_order_note( "Capture request error!" );
             $wc_order->update_status('failed', 'Order failed');
             return false;
@@ -1215,14 +1215,14 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
         $responseBody = wp_remote_retrieve_body($request);
         $data = json_decode($responseBody);
         if (empty($data)) {
-            csPaypalErrorLog($responseBody, "Capture error! Empty response[6]");
+            ep_paypal_error_log($responseBody, "Capture error! Empty response[6]");
             $wc_order->add_order_note( "Capture error! Empty response" );
             $wc_order->update_status('failed', 'Order failed');
             return false;
         }
 
         if ( ! $data->success ) {
-            csPaypalErrorLog($responseBody, "Capture error! Empty response[6.1]");
+            ep_paypal_error_log($responseBody, "Capture error! Empty response[6.1]");
             $wc_order->add_order_note( $data->message );
             $wc_order->update_status('failed', 'Order failed');
             return false;
@@ -1237,7 +1237,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
         $wc_order->update_meta_data( METAKEY_EP_PAYPAL_FEE, $paypalFee);
         $wc_order->update_meta_data( METAKEY_EP_PAYPAL_PAYOUT, $paypalPayout);
         $wc_order->update_meta_data( METAKEY_EP_PAYPAL_CURRENCY, $paypalCurrency);
-        csPaypalSaveTransactionId($wc_order, $newTransactionId);
+        ep_paypal_save_transaction_id($wc_order, $newTransactionId);
 
         $wc_order->add_order_note( 'Payment successfully captured.' );
         $wc_order->update_meta_data( METAKEY_EP_PAYPAL_CAPTURED, 'true' );
@@ -1267,7 +1267,7 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             $wc_order->add_order_note( "Can't found proxy url!" );
             return false;
         }
-        $authId = csPaypalGetTransactionId($wc_order);
+        $authId = ep_paypal_get_transaction_id($wc_order);
         $params = [];
         $params["payment_id"] = $authId;
 
@@ -1280,24 +1280,24 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                 'Content-Type' => 'application/json',
             ],
             'body' => json_encode([
-                'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($wc_order),
+                'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($wc_order),
             ])
         ] );
         if (is_wp_error($request)) {
-            csPaypalErrorLog($request, "Cancel payment request error![6]");
+            ep_paypal_error_log($request, "Cancel payment request error![6]");
             $wc_order->add_order_note( "Cancel payment request error!" );
             return false;
         }
         $responseBody = wp_remote_retrieve_body($request);
         $data = json_decode($responseBody);
         if (empty($data)) {
-            csPaypalErrorLog($responseBody, "Cancel payment error! Empty response[7]");
+            ep_paypal_error_log($responseBody, "Cancel payment error! Empty response[7]");
             $wc_order->add_order_note( "Cancel payment error! Empty response" );
             return false;
         }
 
         if ( ! $data->success ) {
-            csPaypalErrorLog($responseBody, "Cancel payment error! Empty response[7.1]");
+            ep_paypal_error_log($responseBody, "Cancel payment error! Empty response[7.1]");
             $wc_order->add_order_note( "Error: " . $data->message );
             return false;
         }
@@ -1329,27 +1329,27 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             $wc_order->add_order_note( "Can't found proxy url!" );
             return false;
         }
-        $authId = csPaypalGetTransactionId($wc_order);
+        $authId = ep_paypal_get_transaction_id($wc_order);
         $params = [];
         $params["payment_id"] = $authId;
         $reauhtorizePaymentUrl = $proxyUrl . "?wootify-pp-reauthorize-authorization-payment=1&" . http_build_query($params);
 
         $request = wp_remote_get($reauhtorizePaymentUrl, [ 'sslverify' => false, 'timeout' => 300 ] );
         if (is_wp_error($request)) {
-            csPaypalErrorLog($request, "Reauthorize payment request error![8]");
+            ep_paypal_error_log($request, "Reauthorize payment request error![8]");
             $wc_order->add_order_note( "Reauthorize payment request error!" );
             return false;
         }
         $responseBody = wp_remote_retrieve_body($request);
         $data = json_decode($responseBody);
         if (empty($data)) {
-            csPaypalErrorLog($responseBody, "Reauthorize payment error! Empty response[9]");
+            ep_paypal_error_log($responseBody, "Reauthorize payment error! Empty response[9]");
             $wc_order->add_order_note( "Reauthorize payment error! Empty response" );
             return false;
         }
 
         if ( ! $data->success ) {
-            csPaypalErrorLog($responseBody, "Reauthorize payment error! Empty response[9.1]");
+            ep_paypal_error_log($responseBody, "Reauthorize payment error! Empty response[9.1]");
             $wc_order->add_order_note( "Error: " . $data->message );
             return false;
         }

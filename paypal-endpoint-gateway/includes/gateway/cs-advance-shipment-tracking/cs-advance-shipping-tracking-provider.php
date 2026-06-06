@@ -3,7 +3,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-class CS_ADVANCE_SHIPPING_TRACKING_PROVIDER
+class EP_PayPal_Advance_Shipping_Tracking_Provider
 {
     private static $instance;
 
@@ -23,7 +23,7 @@ class CS_ADVANCE_SHIPPING_TRACKING_PROVIDER
             global $wpdb;
             return $wpdb->get_row($wpdb->prepare('SELECT paypal_slug, provider_url FROM %1s WHERE ts_slug = %s', $wpdb->prefix . 'cs_woo_shippment_provider', $tsSlug));;
         } catch (\Exception $e) {
-            csPaypalDebugLog($e->getMessage(), 'CS_ADVANCE_SHIPPING_TRACKING_PROVIDER::getPaypalProvider Exception');
+            ep_paypal_debug_log($e->getMessage(), 'EP_PayPal_Advance_Shipping_Tracking_Provider::getPaypalProvider Exception');
             return false;
         }
     }

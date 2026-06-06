@@ -2,14 +2,14 @@
 /**
  * PayPal order helper.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Helper
+ * @package EP_PayPal\ApiClient\Helper
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Helper;
+namespace EP_PayPal\ApiClient\Helper;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Entity\Order;
 
 /**
  * Class OrderHelper

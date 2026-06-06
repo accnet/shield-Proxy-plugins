@@ -2,16 +2,16 @@
 /**
  * Returns shipping_preference for the given state.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use WC_Cart;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\ApplicationContext;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PurchaseUnit;
+use EP_PayPal\ApiClient\Entity\ApplicationContext;
+use EP_PayPal\ApiClient\Entity\PurchaseUnit;
 
 /**
  * Class ShippingPreferenceFactory

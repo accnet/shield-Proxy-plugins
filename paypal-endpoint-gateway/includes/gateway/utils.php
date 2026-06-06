@@ -2,11 +2,11 @@
 
 /**
  * Endpoint-mode signed request args helper.
- * Replaces shield_proxy_signed_request_args() for endpoint gateway plugins.
+ * Replaces ep_paypal_signed_request_args() for endpoint gateway plugins.
  * Uses derivedKey from active node to sign requests to site1.
  */
-if (!function_exists('ep_endpoint_signed_request_args')) {
-    function ep_endpoint_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
+if (!function_exists('ep_paypal_endpoint_signed_request_args')) {
+    function ep_paypal_endpoint_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
         if (!class_exists('Shield_PayPal_Endpoint_Client')) {
             return $args;
         }
@@ -47,9 +47,9 @@ if (!function_exists('ep_endpoint_signed_request_args')) {
     }
 }
 
-// Also provide backwards-compat shim for shield_proxy_signed_request_args
-if (!function_exists('shield_proxy_signed_request_args')) {
-    function shield_proxy_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
+// Also provide backwards-compat shim for ep_paypal_signed_request_args
+if (!function_exists('ep_paypal_signed_request_args')) {
+    function ep_paypal_signed_request_args($proxyOrUrl, $method, $url, $args = [], $bodyRaw = '') {
         $gateway = '';
         if (isset($args['_shield_gateway'])) {
             $gateway = (string) $args['_shield_gateway'];
@@ -185,13 +185,13 @@ defined('OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY') || define('OPT_WOOTIFY_PAYPAL_ACTI
 defined('OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE') || define('OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE', EP_PP_ROTATION_VALUE);
 defined('METAKEY_PAYPAL_SYNC_TRACKING_INFO') || define('METAKEY_PAYPAL_SYNC_TRACKING_INFO', METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO);
 
-function logRotation($rotationMethod, $proxy, $type)
+function ep_paypal_log_rotation($rotationMethod, $proxy, $type)
 {
     $WOOTIFY_log_dir = wp_get_upload_dir()["basedir"] . '/wootify';
     if (!is_dir($WOOTIFY_log_dir)) {
         mkdir($WOOTIFY_log_dir, 0777, true);
     }
-    $logFilePath = $WOOTIFY_log_dir . '/' . getLogFileName($rotationMethod);
+    $logFilePath = $WOOTIFY_log_dir . '/' . ep_paypal_get_log_file_name($rotationMethod);
     $currentDateTime             = date('Y-m-d H:i:s');
     $proxyVolumeLimit = $proxy['volumeLimit'] ?? $proxy['amount'] ?? 0;
     $proxyVolumeUsed = $proxy['volumeUsed'] ?? $proxy['paid_amount'] ?? 0;
@@ -203,10 +203,10 @@ function logRotation($rotationMethod, $proxy, $type)
     fclose($fp);
 }
 
-function loadLogs($rotationMethod)
+function ep_paypal_load_logs($rotationMethod)
 {
     $wootifyLogDir = wp_get_upload_dir()["basedir"] . '/wootify';
-    $logFilePath = $wootifyLogDir . '/' . getLogFileName($rotationMethod);
+    $logFilePath = $wootifyLogDir . '/' . ep_paypal_get_log_file_name($rotationMethod);
     if (!file_exists($logFilePath)) {
         return [];
     }
@@ -229,21 +229,21 @@ function loadLogs($rotationMethod)
 
 }
 
-function clearLogs($rotationMethod)
+function ep_paypal_clear_logs($rotationMethod)
 {
     $wootifyLogDir = wp_get_upload_dir()["basedir"] . '/wootify';
     if (!is_dir($wootifyLogDir)) {
         mkdir($wootifyLogDir, 0777, true);
     }
 
-    $logFilePath = $wootifyLogDir . '/' . getLogFileName($rotationMethod);
+    $logFilePath = $wootifyLogDir . '/' . ep_paypal_get_log_file_name($rotationMethod);
     $fp = fopen($logFilePath, 'w');
     fwrite($fp, "");
     fclose($fp);
     return empty(file_get_contents($logFilePath));
 }
 
-function getLogFileName($rotationMethod) {
+function ep_paypal_get_log_file_name($rotationMethod) {
     if ( $rotationMethod === ROTATION_METHOD_TIME) {
         return 'WOOTIFY_paypal_rotation_time_log.txt';
     } else if ( $rotationMethod === ROTATION_METHOD_AMOUNT) {
@@ -251,26 +251,20 @@ function getLogFileName($rotationMethod) {
     }
 }
 
-function isEnabledAmountRotation() {
+function ep_paypal_is_enabled_amount_rotation() {
     return ROTATION_METHOD_AMOUNT === get_option(EP_PP_ROTATION_METHOD, ROTATION_METHOD_TIME);
 }
 
-function cs_pp_get_gateway_settings() {
+function ep_paypal_get_gateway_settings() {
     $settings = get_option('woocommerce_endpoint_paypal_settings', []);
     if (!empty($settings) && is_array($settings)) {
         return $settings;
     }
 
-    $settings = get_option('woocommerce_endpoint_paypal_settings', []);
-    if (!empty($settings) && is_array($settings)) {
-        return $settings;
-    }
-
-    $settings = get_option('woocommerce_paypal_settings', []);
-    return is_array($settings) ? $settings : [];
+    return [];
 }
 
-function cs_pp_generate_random_string($length = 10) {
+function ep_paypal_generate_random_string($length = 10) {
     $length = max(1, (int) $length);
     $characters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     $charactersLength = strlen($characters);
@@ -281,7 +275,7 @@ function cs_pp_generate_random_string($length = 10) {
     return $randomString;
 }
 
-function cs_pp_get_product_last_word($productTitle) {
+function ep_paypal_get_product_last_word($productTitle) {
     $productTitle = trim((string) $productTitle);
     if ($productTitle === '') {
         return '';
@@ -291,7 +285,7 @@ function cs_pp_get_product_last_word($productTitle) {
     return $parts ? (string) end($parts) : $productTitle;
 }
 
-function cs_pp_get_order_item_variants($item = null) {
+function ep_paypal_get_order_item_variants($item = null) {
     if (!$item || !is_object($item) || !method_exists($item, 'get_id')) {
         return '';
     }
@@ -333,8 +327,8 @@ function cs_pp_get_order_item_variants($item = null) {
     return implode(' - ', array_unique($variants));
 }
 
-function cs_pp_resolve_product_title($productTitle, $orderId, $item = null, $settings = null) {
-    $settings = is_array($settings) ? $settings : cs_pp_get_gateway_settings();
+function ep_paypal_resolve_product_title($productTitle, $orderId, $item = null, $settings = null) {
+    $settings = is_array($settings) ? $settings : ep_paypal_get_gateway_settings();
     $mode = $settings['product_title_setting'] ?? 'last_word';
     $productTitle = trim(wp_strip_all_tags((string) $productTitle));
 
@@ -343,7 +337,7 @@ function cs_pp_resolve_product_title($productTitle, $orderId, $item = null, $set
     }
 
     if ($mode !== 'user_define') {
-        $lastWord = cs_pp_get_product_last_word($productTitle);
+        $lastWord = ep_paypal_get_product_last_word($productTitle);
         return $lastWord !== '' ? $lastWord : $productTitle;
     }
 
@@ -355,18 +349,18 @@ function cs_pp_resolve_product_title($productTitle, $orderId, $item = null, $set
     $price = ($item && is_object($item) && method_exists($item, 'get_subtotal')) ? (float) $item->get_subtotal() : 0.0;
     $replacements = [
         '[order_id]' => (string) $orderId,
-        '[last_word]' => cs_pp_get_product_last_word($productTitle),
-        '[variants]' => cs_pp_get_order_item_variants($item),
+        '[last_word]' => ep_paypal_get_product_last_word($productTitle),
+        '[variants]' => ep_paypal_get_order_item_variants($item),
     ];
 
     $title = strtr($title, $replacements);
 
     $title = preg_replace_callback('/\[rand_(\d+)\]/', function ($matches) {
-        return cs_pp_generate_random_string((int) $matches[1]);
+        return ep_paypal_generate_random_string((int) $matches[1]);
     }, $title);
 
     $title = preg_replace_callback('/\[str:(\d+)\]/', function ($matches) {
-        return cs_pp_generate_random_string((int) $matches[1]);
+        return ep_paypal_generate_random_string((int) $matches[1]);
     }, $title);
 
     $title = preg_replace_callback('/\[random:([^\]]+)\]/', function ($matches) {
@@ -399,7 +393,7 @@ function cs_pp_resolve_product_title($productTitle, $orderId, $item = null, $set
     return $title !== '' ? $title : $productTitle;
 }
 
-function resetPaidAmountIfNeed() {
+function ep_paypal_reset_paid_amount_if_needed() {
     $proxies = get_option(EP_PP_NODES, []);
     if (empty($proxies)) {
         return [];
@@ -410,12 +404,12 @@ function resetPaidAmountIfNeed() {
     $lastTimeReset = get_option(OPT_WOOTIFY_PAYPAL_LAST_TIME_RESET_PAID_AMOUNT, null);
     // Reset
     if (empty($lastTimeReset) || date('Y-m-d') > $lastTimeReset) {
-        return resetPaidAmount($proxies);
+        return ep_paypal_reset_paid_amount($proxies);
     }
     return $proxies;
 }
 
-function resetPaidAmount($proxies = null)
+function ep_paypal_reset_paid_amount($proxies = null)
 {
     if (empty($proxies)) {
         $proxies = get_option( EP_PP_NODES, [] );
@@ -457,7 +451,7 @@ function resetPaidAmount($proxies = null)
     return $newProxies;
 }
 
-function findActivatedProxyDataById($proxies, $activatedProxyId) {
+function ep_paypal_find_activated_proxy_data_by_id($proxies, $activatedProxyId) {
     foreach ($proxies as $proxy) {
         $proxyId = $proxy['nodeId'] ?? $proxy['id'] ?? null;
         if ($proxyId == $activatedProxyId) {
@@ -467,7 +461,7 @@ function findActivatedProxyDataById($proxies, $activatedProxyId) {
     return null;
 }
 
-function getNextProxy($currentProxyId) {
+function ep_paypal_get_next_proxy($currentProxyId) {
     $proxies = get_option( EP_PP_NODES, [] );
     if (empty($proxies)) return null;
     $lastProxy = end($proxies);
@@ -485,8 +479,8 @@ function getNextProxy($currentProxyId) {
     return null;
 }
 
-function getNextProxyAmountRotation($activatedProxy, $orderTotal) {
-    $proxies = resetPaidAmountIfNeed();
+function ep_paypal_get_next_proxy_amount_rotation($activatedProxy, $orderTotal) {
+    $proxies = ep_paypal_reset_paid_amount_if_needed();
     if ( empty( $proxies ) ) {
         return null;
     }
@@ -498,12 +492,12 @@ function getNextProxyAmountRotation($activatedProxy, $orderTotal) {
             $isCurrentProxyMatched = true;
             continue;
         }
-        if ($isCurrentProxyMatched && isPayableProxy( $proxy, $orderTotal ) ) {
+        if ($isCurrentProxyMatched && ep_paypal_is_payable_proxy( $proxy, $orderTotal ) ) {
             return $proxy;
         }
     }
     foreach ( $proxies as $proxy ) {
-        if ( isPayableProxy( $proxy, $orderTotal ) ) {
+        if ( ep_paypal_is_payable_proxy( $proxy, $orderTotal ) ) {
             return $proxy;
         }
     }
@@ -511,8 +505,8 @@ function getNextProxyAmountRotation($activatedProxy, $orderTotal) {
     return null;
 }
 
-function performProxyAmountRotation($activatedProxy, $orderTotal) {
-    $proxies = resetPaidAmountIfNeed();
+function ep_paypal_perform_proxy_amount_rotation($activatedProxy, $orderTotal) {
+    $proxies = ep_paypal_reset_paid_amount_if_needed();
     if ( empty( $proxies ) ) {
         return null;
     }
@@ -524,36 +518,36 @@ function performProxyAmountRotation($activatedProxy, $orderTotal) {
             $isCurrentProxyMatched = true;
             continue;
         }
-        if ($isCurrentProxyMatched && isPayableProxy( $proxy, $orderTotal ) ) {
+        if ($isCurrentProxyMatched && ep_paypal_is_payable_proxy( $proxy, $orderTotal ) ) {
             $activatedProxy = $proxy;
             update_option( EP_PP_ACTIVE_NODE, $activatedProxy, true );
-            logRotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto" );
+            ep_paypal_log_rotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto" );
 
             return $activatedProxy;
         }
     }
     foreach ( $proxies as $proxy ) {
-        if ( isPayableProxy( $proxy, $orderTotal ) ) {
+        if ( ep_paypal_is_payable_proxy( $proxy, $orderTotal ) ) {
             $activatedProxy = $proxy;
             update_option( EP_PP_ACTIVE_NODE, $activatedProxy, true );
-            logRotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto" );
+            ep_paypal_log_rotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Auto" );
 
             return $activatedProxy;
         }
     }
 
     // All proxies exhausted — force reset paid_amount and restart from first proxy.
-    $proxies = resetPaidAmount();
+    $proxies = ep_paypal_reset_paid_amount();
     if ( !empty( $proxies ) ) {
         $activatedProxy = $proxies[0];
         update_option( EP_PP_ACTIVE_NODE, $activatedProxy, true );
-        logRotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Reset+Auto" );
+        ep_paypal_log_rotation( ROTATION_METHOD_AMOUNT, $activatedProxy, "Reset+Auto" );
         return $activatedProxy;
     }
     return null;
 }
 
-function performProxyByTimeRotation($activatedProxy) {
+function ep_paypal_perform_proxy_by_time_rotation($activatedProxy) {
     $proxies = get_option( EP_PP_NODES, [] );
     if ( empty( $proxies ) ) {
         return null;
@@ -569,38 +563,38 @@ function performProxyByTimeRotation($activatedProxy) {
         if ($isCurrentProxyMatched) {
             $activatedProxy = $proxy;
             update_option( EP_PP_ACTIVE_NODE, $activatedProxy, true );
-            logRotation( ROTATION_METHOD_TIME, $activatedProxy, "Auto" );
+            ep_paypal_log_rotation( ROTATION_METHOD_TIME, $activatedProxy, "Auto" );
 
             return $activatedProxy;
         }
     }
     $activatedProxy = $proxies[0];
     update_option( EP_PP_ACTIVE_NODE, $activatedProxy, true );
-    logRotation( ROTATION_METHOD_TIME, $activatedProxy, "Auto" );
+    ep_paypal_log_rotation( ROTATION_METHOD_TIME, $activatedProxy, "Auto" );
     return $activatedProxy;
 }
 
-function isPayableProxy($proxy, $orderTotal) {
+function ep_paypal_is_payable_proxy($proxy, $orderTotal) {
     $proxyVolumeLimit = $proxy['volumeLimit'] ?? $proxy['amount'] ?? 0;
     $proxyVolumeUsed = $proxy['volumeUsed'] ?? $proxy['paid_amount'] ?? 0;
     return doubleval( $proxyVolumeUsed ) + doubleval( $orderTotal ) < doubleval($proxyVolumeLimit);
 }
 
-function hasPayableProxy($orderTotal) {
-    $proxies = resetPaidAmountIfNeed();
+function ep_paypal_has_payable_proxy($orderTotal) {
+    $proxies = ep_paypal_reset_paid_amount_if_needed();
     if (empty($proxies)) {
         return false;
     }
 
     foreach ($proxies as $proxy) {
-        if(isPayableProxy($proxy, $orderTotal)) {
+        if(ep_paypal_is_payable_proxy($proxy, $orderTotal)) {
             return true;
         }
     }
     return false;
 }
 
-function updateRotationAmount($proxyId, $orderTotal) {
+function ep_paypal_update_rotation_amount($proxyId, $orderTotal) {
     $activatedProxy = get_option( EP_PP_ACTIVE_NODE, null );
     $activatedProxyId = $activatedProxy['nodeId'] ?? $activatedProxy['id'] ?? null;
     if ($activatedProxyId == $proxyId) {
@@ -632,15 +626,15 @@ function updateRotationAmount($proxyId, $orderTotal) {
         }
     }
     $result = update_option(EP_PP_NODES, $proxies, true);
-    
+
     if (class_exists('Shield_SaaS_Client')) {
         Shield_SaaS_Client::sync_stats_to_saas('PayPal');
     }
-    
+
     return $result;
 }
 
-function getEnabledPaymentGateways() {
+function ep_paypal_get_enabled_payment_gateways() {
     $gateways        = WC()->payment_gateways->get_available_payment_gateways();
     $enabledGateways = [];
     if ( $gateways ) {
@@ -656,14 +650,14 @@ function getEnabledPaymentGateways() {
     return $enabledGateways;
 }
 
-function getBrowserFingerprint() {
-    $browserData = (isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '' ) . '|' . 
+function ep_paypal_get_browser_fingerprint() {
+    $browserData = (isset($_SERVER['HTTP_USER_AGENT']) ? $_SERVER['HTTP_USER_AGENT'] : '' ) . '|' .
                    (isset($_SERVER['HTTP_ACCEPT']) ? $_SERVER['HTTP_ACCEPT'] : '') . '|' .
                    (isset($_SERVER['HTTP_ACCEPT_LANGUAGE']) ? $_SERVER['HTTP_ACCEPT_LANGUAGE'] : '');
     return sha1($browserData);
 }
 
-function csLog($error, $message = '') {
+function ep_paypal_log($error, $message = '') {
     $logger = wc_get_logger();
     if (is_array($error) || is_object($error)) {
         $error = json_encode($error);
@@ -679,7 +673,7 @@ function csLog($error, $message = '') {
 
 }
 
-function moveToUnusedProxyIds($proxyIds) {
+function ep_paypal_move_to_unused_proxy_ids($proxyIds) {
     $proxies        = get_option( EP_PP_NODES, [] );
     if (empty($proxies)) {
         $proxies = [];
@@ -704,7 +698,7 @@ function moveToUnusedProxyIds($proxyIds) {
     return $isSuccess1 && $isSuccess2;
 }
 
-function moveToUnusedProxyIdsRestrictAccount($proxyIds) {
+function ep_paypal_move_to_unused_proxy_ids_restrict_account($proxyIds) {
     $proxies        = get_option( EP_PP_NODES, [] );
     if (empty($proxies)) {
         $proxies = [];
@@ -725,11 +719,11 @@ function moveToUnusedProxyIdsRestrictAccount($proxyIds) {
     return $isSuccess1 && $isSuccess2;
 }
 
-function countOrderNeedSync() {
+function ep_paypal_count_order_need_sync() {
     if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
-        $results = queryOrderNeedSyncPaypalHPOS('count');                    
+        $results = ep_paypal_query_order_need_sync_hpos('count');
     } else {
-        $results = queryOrderNeedSyncPaypal('count');                    
+        $results = ep_paypal_query_order_need_sync('count');
     }
     return $results[0]['count'] ?? 0;
 }
@@ -738,13 +732,13 @@ require_once(plugin_dir_path(__FILE__) . 'cs-woocommerce-orders-tracking/include
 require_once(plugin_dir_path(__FILE__) . 'cs-woocommerce-orders-tracking/includes/data.php');
 require_once(plugin_dir_path(__FILE__) . 'cs-advance-shipment-tracking/cs-advance-shipping-tracking-provider.php');
 
-function syncTrackingInfo() {
+function ep_paypal_sync_tracking_info() {
     $csPayPalGw = WC()->payment_gateways->payment_gateways()['endpoint_paypal'];
     $trackingSyncPlugin = $csPayPalGw->get_option('sync_tracking_plugin');
     if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
-        $orders = queryOrderNeedSyncPaypalHPOS('get');
+        $orders = ep_paypal_query_order_need_sync_hpos('get');
     } else {
-        $orders = queryOrderNeedSyncPaypal('get');
+        $orders = ep_paypal_query_order_need_sync('get');
     }
     $hasError = false;
     $errorOrderIdList = [];
@@ -758,7 +752,7 @@ function syncTrackingInfo() {
 
         $processedProxyUrl = $order->get_meta( METAKEY_EP_PAYPAL_PROXY_URL );
         if ( empty( $processedProxyUrl ) ) {
-            csPaypalErrorLog('Sync error: Empty proxy url, order_id: ' . $orderId);
+            ep_paypal_error_log('Sync error: Empty proxy url, order_id: ' . $orderId);
             $hasError       = true;
             $errorOrderIdList[] = $orderId;
             $order->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
@@ -782,10 +776,10 @@ function syncTrackingInfo() {
                     continue;
                 }
                 $trackingNumberArr[] = $trackingItem['tracking_number'];
-                $ppProvider = CS_ADVANCE_SHIPPING_TRACKING_PROVIDER::get_instance()->getPaypalProvider($trackingItem['tracking_provider']);
+                $ppProvider = EP_PayPal_Advance_Shipping_Tracking_Provider::get_instance()->getPaypalProvider($trackingItem['tracking_provider']);
                 $trackingData = [
                     'order_id' => $orderId,
-                    'transaction_id' => csPaypalGetTransactionId($order),
+                    'transaction_id' => ep_paypal_get_transaction_id($order),
                     'tracking_number' => $trackingItem['tracking_number'],
                     'status' => 'SHIPPED',
                     'carrier' => $ppProvider->paypal_slug,
@@ -798,27 +792,27 @@ function syncTrackingInfo() {
                 } else {
                     $trackingData['carrier'] = 'OTHER';
                     $trackingData['carrier_name_other'] = $trackingItem['tracking_provider'];
-                }			
+                }
                 $shippingData[$processedProxyUrl][] = $trackingData;
             }
         } else if ($trackingSyncPlugin == EP_TRACKING_SYNC_PLUGIN_ORDERS_TRACKING) {
             if($trackingDataByOrder = $order->get_meta('_wot_tracking_number')) {
                 $carrierSlug = $order->get_meta('_wot_tracking_carrier');
-                $carrierPaypalName = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL::get_paypal_carrier_by_slug($carrierSlug);
+                $carrierPaypalName = EP_PayPal_Orders_Tracking_Admin::get_paypal_carrier_by_slug($carrierSlug);
                 $trackingData = [
                     'order_id' => $orderId,
-                    'transaction_id' => csPaypalGetTransactionId($order),
+                    'transaction_id' => ep_paypal_get_transaction_id($order),
                     'tracking_number' => $trackingDataByOrder,
                     'status' => 'SHIPPED',
                     'carrier' => $carrierPaypalName,
                 ];
                 $trackingUrl = null;
                 try {
-                    $itemTrackingData = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_instance()->get_item_tracking_number($orderId);
+                    $itemTrackingData = EP_PayPal_Orders_Tracking_Data::get_instance()->get_item_tracking_number($orderId);
                     $trackingUrl = $itemTrackingData['tracking_url_show'] ?? null;
-                    csPaypalDebugLog($itemTrackingData, 'Sync get tracking URL  $itemTrackingData');
+                    ep_paypal_debug_log($itemTrackingData, 'Sync get tracking URL  $itemTrackingData');
                 } catch (\Exception $e) {
-                    csPaypalDebugLog($e->getMessage(), 'Sync get tracking URL exception!');
+                    ep_paypal_debug_log($e->getMessage(), 'Sync get tracking URL exception!');
                 }
                 if (!empty($trackingUrl)) {
                     $trackingData['tracking_url'] = $trackingUrl;
@@ -840,10 +834,10 @@ function syncTrackingInfo() {
                     }
                     $trackingNumberArr[] = $current_tracking_data['tracking_number'];
                     $carrierName = $current_tracking_data['carrier_name'];
-                    $carrierPaypalName = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL::get_carrier($carrierName);
+                    $carrierPaypalName = EP_PayPal_Orders_Tracking_Admin::get_carrier($carrierName);
                     $trackingData = [
                         'order_id'           => $orderId,
-                        'transaction_id'     => csPaypalGetTransactionId($order),
+                        'transaction_id'     => ep_paypal_get_transaction_id($order),
                         'tracking_number'    => $current_tracking_data['tracking_number'],
                         'status'             => 'SHIPPED',
                         'carrier'            => $carrierPaypalName,
@@ -853,17 +847,17 @@ function syncTrackingInfo() {
                     }
                     $trackingUrl = null;
                     try {
-                        $itemTrackingData = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_instance()->get_item_tracking_number($orderId, $item_id);
+                        $itemTrackingData = EP_PayPal_Orders_Tracking_Data::get_instance()->get_item_tracking_number($orderId, $item_id);
                         $trackingUrl = $itemTrackingData['tracking_url_show'] ?? null;
-                        csPaypalDebugLog($itemTrackingData, 'Sync get tracking URL  $itemTrackingData');
+                        ep_paypal_debug_log($itemTrackingData, 'Sync get tracking URL  $itemTrackingData');
                     } catch (\Exception $e) {
-                        csPaypalDebugLog($e->getMessage(), 'Sync get tracking URL exception!');
+                        ep_paypal_debug_log($e->getMessage(), 'Sync get tracking URL exception!');
                     }
                     if (!empty($trackingUrl)) {
                         $trackingData['tracking_url'] = $trackingUrl;
                     }
                     $shippingData[$processedProxyUrl][] = $trackingData;
-                }   
+                }
             }
         } else if ($trackingSyncPlugin == EP_TRACKING_SYNC_PLUGIN_DIANXIAOMI) {
             $trackingProvider = $order->get_meta('_dianxiaomi_tracking_provider_name');
@@ -873,7 +867,7 @@ function syncTrackingInfo() {
             }
             $shippingData[$processedProxyUrl][] = [
                 'order_id'           => $orderId,
-                'transaction_id'     => csPaypalGetTransactionId($order),
+                'transaction_id'     => ep_paypal_get_transaction_id($order),
                 'tracking_number'    => $trackingNumber,
                 'status'             => 'SHIPPED',
                 'carrier'            => 'OTHER',
@@ -881,14 +875,14 @@ function syncTrackingInfo() {
             ];
         }
     }
-    csPaypalDebugLog($shippingData, 'Sync data $shippingData INFO');
+    ep_paypal_debug_log($shippingData, 'Sync data $shippingData INFO');
     foreach ($shippingData as $proxyUrl => $shippingDataBatch) {
         if (isset($shippingDataBatch) && count($shippingDataBatch)) {
             $shippingDataParts = array_chunk($shippingDataBatch, 20);
         } else {
             $shippingDataParts = [];
         }
-        
+
         foreach($shippingDataParts as $shippingDataPart) {
             $orderIds = array_unique(array_map(function ($data) {
                 return $data['order_id'];
@@ -896,7 +890,7 @@ function syncTrackingInfo() {
             $traceId = function_exists('wp_generate_uuid4')
                 ? wp_generate_uuid4()
                 : uniqid('shield-track-', true);
-            
+
             // Remove order_id field to add PayPal track
             $shippingDataPush = array_map(function ($data) {
                 unset($data['order_id']);
@@ -906,7 +900,7 @@ function syncTrackingInfo() {
             $requestBody = wp_json_encode([
                 'trackers' => $shippingDataPush,
             ]);
-            $response = wp_remote_post($requestUrl, shield_proxy_signed_request_args($proxyUrl, 'POST', $requestUrl, [
+            $response = wp_remote_post($requestUrl, ep_paypal_signed_request_args($proxyUrl, 'POST', $requestUrl, [
                 'timeout' => 5 * 60,
                 'headers' => [
                     'Content-Type' => 'application/json',
@@ -914,10 +908,10 @@ function syncTrackingInfo() {
                 ],
                 'body' => $requestBody,
             ], $requestBody));
-            
+
             if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
                 $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
-                csPaypalErrorLog([$response, $requestUrl, $orderIds, 'trace_id' => $traceId], "Sync data error![1]");
+                ep_paypal_error_log([$response, $requestUrl, $orderIds, 'trace_id' => $traceId], "Sync data error![1]");
                 foreach ($orderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
                     $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
@@ -929,7 +923,7 @@ function syncTrackingInfo() {
             $data = json_decode( wp_remote_retrieve_body( $response ) );
             if ( ! $data->success ) {
                 $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
-                csPaypalErrorLog([$response, $requestUrl, $orderIds, 'trace_id' => $traceId, 'correlation_id' => $data->correlation_id ?? null], "Sync data error![2]");
+                ep_paypal_error_log([$response, $requestUrl, $orderIds, 'trace_id' => $traceId, 'correlation_id' => $data->correlation_id ?? null], "Sync data error![2]");
                 foreach ($orderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
                     $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
@@ -945,7 +939,7 @@ function syncTrackingInfo() {
             }
         }
     }
-   
+
     if ($hasError) {
         echo json_encode( [
             'success' => false,
@@ -954,40 +948,40 @@ function syncTrackingInfo() {
     } else {
         echo json_encode( [
             'success' => true,
-            'count'   => countOrderNeedSync()
+            'count'   => ep_paypal_count_order_need_sync()
         ] );
     }
 }
 require_once(plugin_dir_path(__FILE__) . 'vendor/autoload.php');
 $bootstrapWootifyPaypalModules = require_once(plugin_dir_path(__FILE__) . 'modules/ppcp-api-client/bootstrap.php');
 $appContainerWootifyPaypalModules = $bootstrapWootifyPaypalModules( plugin_dir_path(__FILE__) . 'modules/ppcp-api-client');
-    
-function get_purchase_unit_from_cart(WC_Cart $cart) {
+
+function ep_paypal_get_purchase_unit_from_cart(WC_Cart $cart) {
     global $appContainerWootifyPaypalModules;
     $purchaseUnits = $appContainerWootifyPaypalModules->get('api.factory.purchase-unit')->from_wc_cart($cart)->to_array();
     $result = [];
     foreach (['amount'] as $attrToUse) {
         $result[$attrToUse] = $purchaseUnits[$attrToUse];
     }
-    
+
     return $result;
 }
 
-function get_purchase_unit_from_order(WC_Order $order) {
+function ep_paypal_get_purchase_unit_from_order(WC_Order $order) {
     global $appContainerWootifyPaypalModules;
     $purchaseUnits = $appContainerWootifyPaypalModules->get('api.factory.purchase-unit')->from_wc_order($order)->to_array();
         $result = [];
     foreach (['amount', 'items', 'invoice_id'] as $attrToUse) {
         $result[$attrToUse] = $purchaseUnits[$attrToUse];
     }
-    
+
     return $result;
 }
 
-function csPaypalErrorLog($data, $message = '')
+function ep_paypal_error_log($data, $message = '')
 {
     $trace = debug_backtrace();
-    $dataLogString = csPaypalHandleDataLog($data, $message) 
+    $dataLogString = ep_paypal_handle_data_log($data, $message)
         . json_encode([$trace[1]['class'] ?? null, $trace[1]['function'] ?? null, $trace[1]['args'] ?? null], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
@@ -996,10 +990,10 @@ function csPaypalErrorLog($data, $message = '')
     }
 }
 
-function csPaypalDebugLog($data, $message = '')
+function ep_paypal_debug_log($data, $message = '')
 {
     $trace = debug_backtrace();
-    $dataLogString = csPaypalHandleDataLog($data, $message) 
+    $dataLogString = ep_paypal_handle_data_log($data, $message)
         . json_encode([$trace[1]['class'] ?? null, $trace[1]['function'] ?? null, $trace[1]['args'] ?? null], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
@@ -1008,7 +1002,7 @@ function csPaypalDebugLog($data, $message = '')
     }
 }
 
-function csPaypalHandleDataLog($data, $message = '') {
+function ep_paypal_handle_data_log($data, $message = '') {
     try {
         if (is_array($data) || is_object($data)) {
             $dataLog = json_encode($data);
@@ -1022,7 +1016,7 @@ function csPaypalHandleDataLog($data, $message = '') {
         . $dataLog;
 }
 
-function getCsPaypalOrderDetailFromWcOrder(WC_Order $order) {
+function ep_paypal_get_order_detail_from_wc_order(WC_Order $order) {
     // Shipping
     $shippingName     = $order->get_shipping_first_name() . " " . $order->get_shipping_last_name();
     $shippingAddress1 = $order->get_shipping_address_1();
@@ -1078,13 +1072,13 @@ function getCsPaypalOrderDetailFromWcOrder(WC_Order $order) {
     }
 }
 
-function csPaypalSaveTransactionId(WC_Order $order, $transactionId) {
+function ep_paypal_save_transaction_id(WC_Order $order, $transactionId) {
     $order->set_transaction_id($transactionId);
     $order->update_meta_data('METAKEY_CS_TRANSACTION_ID', $transactionId);
     $order->save();
 }
 
-function csPaypalGetTransactionId(WC_Order $order) {
+function ep_paypal_get_transaction_id(WC_Order $order) {
     $id = $order->get_transaction_id();
     if (empty($id)) {
         $id = $order->get_meta('METAKEY_CS_TRANSACTION_ID');
@@ -1092,7 +1086,7 @@ function csPaypalGetTransactionId(WC_Order $order) {
     return $id;
 }
 
-function queryOrderNeedSyncPaypal($mode = 'count') {
+function ep_paypal_query_order_need_sync($mode = 'count') {
     global $wpdb;
 
     $csPayPalGw = WC()->payment_gateways->payment_gateways()['endpoint_paypal'];
@@ -1115,21 +1109,21 @@ function queryOrderNeedSyncPaypal($mode = 'count') {
             return $wpdb->get_results( $wpdb->prepare( "
                 SELECT $selectStatement FROM {$wpdb->prefix}posts AS posts
                 LEFT JOIN {$wpdb->prefix}postmeta AS post_meta1 ON posts.id = post_meta1.post_id AND post_meta1.meta_key = %s
-                LEFT JOIN {$wpdb->prefix}postmeta AS post_meta2 ON posts.id = post_meta2.post_id AND post_meta2.meta_key = %s 
+                LEFT JOIN {$wpdb->prefix}postmeta AS post_meta2 ON posts.id = post_meta2.post_id AND post_meta2.meta_key = %s
                 LEFT JOIN {$wpdb->prefix}postmeta AS post_meta3 ON posts.id = post_meta3.post_id AND post_meta3.meta_key = '_wot_tracking_number'
-                LEFT JOIN {$wpdb->prefix}woocommerce_order_items AS order_items 
+                LEFT JOIN {$wpdb->prefix}woocommerce_order_items AS order_items
                     ON posts.id = order_items.order_id AND order_items.order_item_type = 'line_item'
-                LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS order_itemmeta 
+                LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS order_itemmeta
                     ON order_items.order_item_id = order_itemmeta.order_item_id AND order_itemmeta.meta_key = '_vi_wot_order_item_tracking_data'
-                WHERE posts.post_type = 'shop_order' 
-                  AND post_meta1.meta_value = %d 
+                WHERE posts.post_type = 'shop_order'
+                  AND post_meta1.meta_value = %d
                   AND (
-                        (order_itemmeta.meta_value IS NOT NULL AND (post_meta2.meta_value IS NULL OR post_meta2.meta_value = 'true'))   
-                        OR 
+                        (order_itemmeta.meta_value IS NOT NULL AND (post_meta2.meta_value IS NULL OR post_meta2.meta_value = 'true'))
+                        OR
                         post_meta3.meta_value IS NOT NULL
                       );
             ", METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, METAKEY_EP_PAYPAL_CAPTURED, EP_PAYPAL_NOT_SYNCED ), ARRAY_A );
-        
+
         case EP_TRACKING_SYNC_PLUGIN_DIANXIAOMI:
             return $wpdb->get_results( $wpdb->prepare( "
                 SELECT $selectStatement FROM {$wpdb->prefix}posts AS posts
@@ -1137,7 +1131,7 @@ function queryOrderNeedSyncPaypal($mode = 'count') {
                 LEFT JOIN {$wpdb->prefix}postmeta AS post_meta2 ON posts.id = post_meta2.post_id AND post_meta2.meta_key = '_dianxiaomi_tracking_provider_name'
                 LEFT JOIN {$wpdb->prefix}postmeta AS post_meta3 ON posts.id = post_meta3.post_id AND post_meta3.meta_key = %s
                 LEFT JOIN {$wpdb->prefix}postmeta AS post_meta4 ON posts.id = post_meta4.post_id AND post_meta4.meta_key = '_dianxiaomi_tracking_number'
-                WHERE posts.post_type = 'shop_order' AND post_meta1.meta_value = %d AND post_meta2.meta_value IS NOT NULL 
+                WHERE posts.post_type = 'shop_order' AND post_meta1.meta_value = %d AND post_meta2.meta_value IS NOT NULL
                     AND (post_meta3.meta_value IS NULL OR post_meta3.meta_value = 'true')
                     AND post_meta4.meta_value IS NOT NULL;
             ", METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO , METAKEY_EP_PAYPAL_CAPTURED, EP_PAYPAL_NOT_SYNCED), ARRAY_A );
@@ -1145,7 +1139,7 @@ function queryOrderNeedSyncPaypal($mode = 'count') {
     }
 }
 
-function queryOrderNeedSyncPaypalHPOS($mode = 'count')
+function ep_paypal_query_order_need_sync_hpos($mode = 'count')
 {
     global $wpdb;
 
@@ -1169,16 +1163,16 @@ function queryOrderNeedSyncPaypalHPOS($mode = 'count')
             return $wpdb->get_results($wpdb->prepare("
                 SELECT $selectStatement FROM {$wpdb->prefix}wc_orders AS orders
                 LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta1 ON orders.id = order_meta1.order_id AND order_meta1.meta_key = %s
-                LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta2 ON orders.id = order_meta2.order_id AND order_meta2.meta_key = %s 
+                LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta2 ON orders.id = order_meta2.order_id AND order_meta2.meta_key = %s
                 LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta3 ON orders.id = order_meta3.order_id AND order_meta3.meta_key = '_wot_tracking_number'
-                LEFT JOIN {$wpdb->prefix}woocommerce_order_items AS order_items 
+                LEFT JOIN {$wpdb->prefix}woocommerce_order_items AS order_items
                     ON orders.id = order_items.order_id AND order_items.order_item_type = 'line_item'
-                LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS order_itemmeta 
+                LEFT JOIN {$wpdb->prefix}woocommerce_order_itemmeta AS order_itemmeta
                     ON order_items.order_item_id = order_itemmeta.order_item_id AND order_itemmeta.meta_key = '_vi_wot_order_item_tracking_data'
-                WHERE order_meta1.meta_value = %d 
+                WHERE order_meta1.meta_value = %d
                   AND (
-                        (order_itemmeta.meta_value IS NOT NULL AND (order_meta2.meta_value IS NULL OR order_meta2.meta_value = 'true'))   
-                        OR 
+                        (order_itemmeta.meta_value IS NOT NULL AND (order_meta2.meta_value IS NULL OR order_meta2.meta_value = 'true'))
+                        OR
                         order_meta3.meta_value IS NOT NULL
                       );
             ", METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, METAKEY_EP_PAYPAL_CAPTURED, EP_PAYPAL_NOT_SYNCED), ARRAY_A);
@@ -1190,7 +1184,7 @@ function queryOrderNeedSyncPaypalHPOS($mode = 'count')
                 LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta2 ON orders.id = order_meta2.order_id AND order_meta2.meta_key = '_dianxiaomi_tracking_provider_name'
                 LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta3 ON orders.id = order_meta3.order_id AND order_meta3.meta_key = %s
                 LEFT JOIN {$wpdb->prefix}wc_orders_meta AS order_meta4 ON orders.id = order_meta4.order_id AND order_meta4.meta_key = '_dianxiaomi_tracking_number'
-                WHERE order_meta1.meta_value = %d AND order_meta2.meta_value IS NOT NULL 
+                WHERE order_meta1.meta_value = %d AND order_meta2.meta_value IS NOT NULL
                     AND (order_meta3.meta_value IS NULL OR order_meta3.meta_value = 'true')
                     AND order_meta4.meta_value IS NOT NULL;
             ", METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, METAKEY_EP_PAYPAL_CAPTURED, EP_PAYPAL_NOT_SYNCED), ARRAY_A);
@@ -1198,8 +1192,8 @@ function queryOrderNeedSyncPaypalHPOS($mode = 'count')
     }
 }
 
-function isPaypalShieldReachAmount($orderTotal) {
-    if (!isEnabledAmountRotation()) {
+function ep_paypal_is_shield_reach_amount($orderTotal) {
+    if (!ep_paypal_is_enabled_amount_rotation()) {
         return false;
     }
     $proxies = get_option(EP_PP_NODES, []);
@@ -1216,7 +1210,7 @@ function isPaypalShieldReachAmount($orderTotal) {
     return true;
 }
 
-function csPaypalSendMailShieldReachAmount() {
+function ep_paypal_send_mail_shield_reach_amount() {
     $csPaypalGw = WC()->payment_gateways->payment_gateways()['endpoint_paypal'];
     if($csPaypalGw->get_option('send_email_notice_to_admin') === 'no') {
         return false;
@@ -1242,14 +1236,14 @@ function csPaypalSendMailShieldReachAmount() {
             </p>
         <?php
 		$body = ob_get_clean();
-        $body = csPaypalBuildBodyEmail("Paypal shield amount has been reached", $body);
-        wp_mail(csPaypalGetAdminEmails(), "[$siteDomain]: Paypal shield amount has been reached", $body, $headers);
+        $body = ep_paypal_build_body_email("Paypal shield amount has been reached", $body);
+        wp_mail(ep_paypal_get_admin_emails(), "[$siteDomain]: Paypal shield amount has been reached", $body, $headers);
     } catch (\Exception $e) {
-        csPaypalErrorLog($e->getMessage(), 'csPaypalSendMailShieldReachAmount failed!');
+        ep_paypal_error_log($e->getMessage(), 'ep_paypal_send_mail_shield_reach_amount failed!');
     }
 }
 
-function csPaypalSendMailShieldDie($shieldUrl) {
+function ep_paypal_send_mail_shield_die($shieldUrl) {
     $csPaypalGw = WC()->payment_gateways->payment_gateways()['endpoint_paypal'];
     if($csPaypalGw->get_option('send_email_notice_to_admin') === 'no') {
         return false;
@@ -1268,14 +1262,14 @@ function csPaypalSendMailShieldDie($shieldUrl) {
             </p>
         <?php
 		$body = ob_get_clean();
-        $body = csPaypalBuildBodyEmail("A Paypal shield has been moved to unused list", $body);
-        wp_mail(csPaypalGetAdminEmails(), "[$siteDomain]: A Paypal shield $shieldUrl has been moved to unused list", $body, $headers);
+        $body = ep_paypal_build_body_email("A Paypal shield has been moved to unused list", $body);
+        wp_mail(ep_paypal_get_admin_emails(), "[$siteDomain]: A Paypal shield $shieldUrl has been moved to unused list", $body, $headers);
     } catch (\Exception $e) {
-        csPaypalErrorLog($e->getMessage(), 'csPaypalSendMailShieldDie failed!');
+        ep_paypal_error_log($e->getMessage(), 'ep_paypal_send_mail_shield_die failed!');
     }
 }
 
-function csPaypalSendMailOrderBlacklisted($orderId) {
+function ep_paypal_send_mail_order_blacklisted($orderId) {
     $csPaypalGw = WC()->payment_gateways->payment_gateways()['endpoint_paypal'];
     if($csPaypalGw->get_option('send_email_notice_to_admin') === 'no') {
         return false;
@@ -1302,17 +1296,17 @@ function csPaypalSendMailOrderBlacklisted($orderId) {
                     'plain_text'    => false,
                     'email'         => '',
                 ));
-            ?>   
+            ?>
         <?php
 		$body = ob_get_clean();
-        $body = csPaypalBuildBodyEmail("Order Blacklisted: #{$order->get_order_number()}", $body);
-        wp_mail(csPaypalGetAdminEmails(), "[$siteDomain]: Order #{$order->get_order_number()} has been BLACKLISTED", $body, $headers);
+        $body = ep_paypal_build_body_email("Order Blacklisted: #{$order->get_order_number()}", $body);
+        wp_mail(ep_paypal_get_admin_emails(), "[$siteDomain]: Order #{$order->get_order_number()} has been BLACKLISTED", $body, $headers);
     } catch (\Exception $e) {
-        csPaypalErrorLog($e->getMessage(), 'csPaypalSendMailShieldDie failed!');
+        ep_paypal_error_log($e->getMessage(), 'ep_paypal_send_mail_shield_die failed!');
     }
 }
 
-function csPaypalBuildBodyEmail($heading, $body) {
+function ep_paypal_build_body_email($heading, $body) {
     add_filter( 'woocommerce_email_footer_text', function () {
         return "<br><b>Cards Shield Team</b><br/>support@cardsshield.com";
     } );
@@ -1322,7 +1316,7 @@ function csPaypalBuildBodyEmail($heading, $body) {
     return $wc_email->style_inline($wrapped_message);
 }
 
-function csPaypalGetAdminEmails() {
+function ep_paypal_get_admin_emails() {
     $blogusers = get_users('role=Administrator');
     $emails = [];
     foreach ($blogusers as $user) {
@@ -1334,16 +1328,16 @@ function csPaypalGetAdminEmails() {
     return false;
 }
 
-function csEndpointGetShieldPaypalToProcess($csOrderKey, $orderTotal) {
+function ep_paypal_get_shield_to_process($csOrderKey, $orderTotal) {
     if ($shield = get_transient('csEndpointGetShieldPaypalToProcessValue')) {
         set_transient("csEndpointGetShieldPaypalToProcessValue_$csOrderKey", $shield, 14400);
         $shield = json_decode($shield);
         return 'https://' . $shield->shield_domain;
     }
-    if (!$gwDomain = csGetGatewayDomain()) {
+    if (!$gwDomain = ep_paypal_get_gateway_domain()) {
         return null;
     }
-    wc_get_logger()->debug('request csEndpointGetShieldPaypalToProcess', ['source' => 'cardshield-gateway-paypal-INFO']);
+    wc_get_logger()->debug('request ep_paypal_get_shield_to_process', ['source' => 'cardshield-gateway-paypal-INFO']);
     $request = wp_remote_post($gwDomain . '/woo/get-shield-process', [
         'sslverify' => false,
         'timeout' => 300,
@@ -1359,7 +1353,7 @@ function csEndpointGetShieldPaypalToProcess($csOrderKey, $orderTotal) {
         ])
     ]);
     if (is_wp_error($request)) {
-        csPaypalErrorLog($request, "csEndpointGetShieldPaypalToProcess error");
+        ep_paypal_error_log($request, "ep_paypal_get_shield_to_process error");
         return null;
     }
     $responseBody = wp_remote_retrieve_body($request);
@@ -1371,13 +1365,13 @@ function csEndpointGetShieldPaypalToProcess($csOrderKey, $orderTotal) {
         set_transient('csEndpointGetShieldPaypalToProcessValue', json_encode($data->shield), 10);
         return $shieldUrl;
     } else {
-        csPaypalErrorLog($request, "csEndpointGetShieldPaypalToProcess error[2]");
+        ep_paypal_error_log($request, "ep_paypal_get_shield_to_process error[2]");
         return null;
     }
 }
 
-function csEndpointPerformShieldRotateByAmount(WC_Order $order) {
-    if (!$gwDomain = csGetGatewayDomain()) {
+function ep_paypal_perform_shield_rotate_by_amount(WC_Order $order) {
+    if (!$gwDomain = ep_paypal_get_gateway_domain()) {
         return null;
     }
     $csOrderKey = $order->get_meta(METAKEY_PAYPAL_PROCESSING_ORDER_KEY);
@@ -1396,15 +1390,15 @@ function csEndpointPerformShieldRotateByAmount(WC_Order $order) {
         ],
         'body' => json_encode($body)
     ]);
-    csPaypalDebugLog(['request' => $body, 'response' => $request], "csEndpointPerformShieldRotateByAmount response");
+    ep_paypal_debug_log(['request' => $body, 'response' => $request], "ep_paypal_perform_shield_rotate_by_amount response");
     if (is_wp_error($request)) {
-        csPaypalErrorLog($request, "csEndpointPerformShieldRotateByAmount error");
+        ep_paypal_error_log($request, "ep_paypal_perform_shield_rotate_by_amount error");
         return null;
     }
 }
 
-function csEndpointSetNextShield(WC_Order $order) {
-    if (!$gwDomain = csGetGatewayDomain()) {
+function ep_paypal_set_next_shield(WC_Order $order) {
+    if (!$gwDomain = ep_paypal_get_gateway_domain()) {
         return null;
     }
     $csOrderKey = $order->get_meta(METAKEY_PAYPAL_PROCESSING_ORDER_KEY);
@@ -1422,18 +1416,18 @@ function csEndpointSetNextShield(WC_Order $order) {
             'shield_processing' => json_decode(get_transient("csEndpointGetShieldPaypalToProcessValue_$csOrderKey"), true),
         ])
     ]);
-    csPaypalDebugLog($request, "csEndpointSetNextShield response");
+    ep_paypal_debug_log($request, "ep_paypal_set_next_shield response");
     if (is_wp_error($request)) {
-        csPaypalErrorLog($request, "csEndpointSetNextShield error");
+        ep_paypal_error_log($request, "ep_paypal_set_next_shield error");
         return null;
     }
 }
 
-function isCsPaypalEnableEndpointMode() {
+function ep_paypal_is_endpoint_mode_enabled() {
     return get_option(EP_PP_CONNECTION_MODE, null) == EP_PP_MODE_ENDPOINT_TOKEN;
 }
 
-function csGetGatewayDomain()
+function ep_paypal_get_gateway_domain()
 {
     try {
         $endpointToken = get_option(EP_PP_ENDPOINT_TOKEN, null);
@@ -1443,12 +1437,12 @@ function csGetGatewayDomain()
             'ZQXJKVWPY ./-:?=&%# 123456789ABCDEFGHILMNORSTUabcdefghijklmnopqrstuvwxyz'));
         return str_replace($endpointToken, '', $decrypt);
     } catch (\Exception $e) {
-        csPaypalErrorLog($e->getMessage(), 'csGetGatewayDomain failed!');
+        ep_paypal_error_log($e->getMessage(), 'ep_paypal_get_gateway_domain failed!');
         return null;
     }
 }
 
-function csPaypalGetClientIP()
+function ep_paypal_get_client_ip()
 {
     foreach (array('HTTP_CLIENT_IP', 'HTTP_X_FORWARDED_FOR', 'HTTP_X_FORWARDED', 'HTTP_X_CLUSTER_CLIENT_IP', 'HTTP_FORWARDED_FOR', 'HTTP_FORWARDED', 'REMOTE_ADDR') as $key) {
         if (array_key_exists($key, $_SERVER) === true) {

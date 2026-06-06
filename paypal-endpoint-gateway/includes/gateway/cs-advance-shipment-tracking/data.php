@@ -1,5 +1,5 @@
 <?php
-function csPaypalGetAdvanceShipmentTrackingData()
+function ep_paypal_get_advance_shipment_tracking_data()
 {
     return array(
         array('id' => '1', 'provider_name' => 'Australia Post', 'api_provider_name' => NULL, 'custom_provider_name' => NULL, 'ts_slug' => 'australia-post', 'provider_url' => 'http://auspost.com.au/track/track.html?id=%number%', 'shipping_country' => 'AU', 'shipping_default' => '1', 'custom_thumb_id' => '0', 'display_in_order' => '1', 'trackship_supported' => '1', 'sort_order' => '0', 'custom_tracking_url' => NULL, 'paypal_slug' => 'AUSTRALIA_POST', 'shipping_country_name' => 'Australia'),

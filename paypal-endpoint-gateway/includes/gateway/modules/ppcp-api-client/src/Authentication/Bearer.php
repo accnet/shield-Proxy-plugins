@@ -2,14 +2,14 @@
 /**
  * The bearer interface.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Authentication
+ * @package EP_PayPal\ApiClient\Authentication
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Authentication;
+namespace EP_PayPal\ApiClient\Authentication;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Token;
+use EP_PayPal\ApiClient\Entity\Token;
 
 /**
  * Interface Bearer

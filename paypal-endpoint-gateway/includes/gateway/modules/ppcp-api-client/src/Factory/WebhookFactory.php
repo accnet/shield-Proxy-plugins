@@ -2,16 +2,16 @@
 /**
  * Creates Webhooks.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use stdClass;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Webhook;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\Webhook;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class WebhookFactory

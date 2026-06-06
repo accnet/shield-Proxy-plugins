@@ -2,14 +2,14 @@
 /**
  * The money object.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Entity
+ * @package EP_PayPal\ApiClient\Entity
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Entity;
+namespace EP_PayPal\ApiClient\Entity;
 
-use WooCommerce\WootifyPaypal\ApiClient\Helper\MoneyFormatter;
+use EP_PayPal\ApiClient\Helper\MoneyFormatter;
 
 /**
  * Class Money

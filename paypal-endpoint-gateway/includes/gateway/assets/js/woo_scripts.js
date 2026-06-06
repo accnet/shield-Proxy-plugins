@@ -10,7 +10,7 @@ jQuery(document).ready( function($)
 
         var data = {
             'action': 'WOOTIFY_gateway_paypal_action',
-            'command': 'syncTrackingInfo',
+            'command': 'ep_paypal_sync_tracking_info',
         };
         jQuery.ajaxSetup({timeout: 300000});
         jQuery.post(cs_ajax_object.ajax_url, data, function (response) {

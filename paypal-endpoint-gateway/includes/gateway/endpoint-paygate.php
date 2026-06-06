@@ -41,10 +41,7 @@ if (!wp_next_scheduled('ep_paypal_daily')) {
 }
 add_action('ep_paypal_daily', 'ep_paypal_daily_process');
 
-$wootifyPpSettings = get_option('woocommerce_wootify_paypal_settings', []);
-if (empty($wootifyPpSettings)) {
-    $wootifyPpSettings = get_option('woocommerce_paypal_settings', []);
-}
+$wootifyPpSettings = get_option('woocommerce_endpoint_paypal_settings', []);
 if (isset($wootifyPpSettings['sync_tracking_automatic']) && $wootifyPpSettings['sync_tracking_automatic'] === 'yes' && !wp_next_scheduled('ep_paypal_cron_auto_sync')) {
     wp_schedule_event(strtotime('7:00:00'), 'daily', 'ep_paypal_cron_auto_sync');
     wp_schedule_event(strtotime('8:00:00'), 'daily', 'ep_paypal_cron_auto_sync');
@@ -55,11 +52,11 @@ function ep_paypal_daily_process() {
     // Reset paid amount
     $rotationMethod = get_option(EP_PP_ROTATION_METHOD, ROTATION_METHOD_TIME);
     if ($rotationMethod === ROTATION_METHOD_AMOUNT) {
-        resetPaidAmount();
+        ep_paypal_reset_paid_amount();
     }
 }
 function ep_paypal_cron_auto_sync_process() {
-    syncTrackingInfo();
+    ep_paypal_sync_tracking_info();
 }
 
 add_filter('woocommerce_payment_gateways', 'ep_paypal_add_gateway_class');
@@ -68,8 +65,8 @@ function ep_paypal_add_gateway_class($gateways) {
     return $gateways;
 }
 
-add_action('get_header', 'handleReturn');
-add_action('wp', 'ensure_session'); // Ensure there is a customer session so that nonce is not invalidated by new session created on AJAX POST request.
+add_action('get_header', 'ep_paypal_handle_return');
+add_action('wp', 'ep_paypal_ensure_session'); // Ensure there is a customer session so that nonce is not invalidated by new session created on AJAX POST request.
 
 function endpoint_paypal_rotation_checker() {
     return; // SaaS manages rotation
@@ -78,7 +75,7 @@ function endpoint_paypal_rotation_checker() {
 /**
  * Creates a customer session if one is not already active.
  */
-function ensure_session() {
+function ep_paypal_ensure_session() {
     $frontend = (!is_admin() || defined('DOING_AJAX')) && !defined('DOING_CRON') && !defined('REST_REQUEST');
 
     if (!$frontend) {
@@ -90,7 +87,7 @@ function ensure_session() {
     }
 }
 
-function handleReturn() {
+function ep_paypal_handle_return() {
     global $woocommerce;
     if (isset($_GET["woo-wootify-return"]) && !empty($_GET['order_id'])) {
 
@@ -113,7 +110,7 @@ function handleReturn() {
                 $proxyUrl,
                 isset($_GET['err_msg']) ? $_GET['err_msg'] : 'Unknown error'
             ));
-            redirectToCheckoutPage();
+            ep_paypal_redirect_to_checkout_page();
         }
         if (!$isCancel) {
             $payment_id = $_GET["paymentId"];
@@ -128,7 +125,7 @@ function handleReturn() {
             $payer_data["payer_id"] = $payer_id;
             $payer_data["create_billing_agreement"] = $create_billing_agreement;
             $payer_data["order_id"] = $order_id;
-            $purchaseUnitsFromWooOrder = get_purchase_unit_from_order($order);
+            $purchaseUnitsFromWooOrder = ep_paypal_get_purchase_unit_from_order($order);
             $payer_data["purchase_units"] = $purchaseUnitsFromWooOrder;
             $method = $paymentIntent == EP_PAYPAL_INTENT_AUTHORIZE ? 'wootify-pp-authorize-payment' : 'wootify-pp-capture-payment';
             $proxyCapturePaymentAPI = $proxyUrl . "?$method=1&" . http_build_query($payer_data);
@@ -140,11 +137,11 @@ function handleReturn() {
                     'Content-Type' => 'application/json',
                 ],
                 'body' => json_encode([
-                    'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
+                    'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($order),
                 ])
             ]);
             if (is_wp_error($request)) {
-                csPaypalErrorLog($request, "$method error");
+                ep_paypal_error_log($request, "$method error");
                 wc_add_notice(__('Your PayPal checkout session has expired. Please check out again.[3]', 'wootify'), 'error');
                 $order->add_order_note(sprintf(
                     __('Paypal charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
@@ -152,12 +149,12 @@ function handleReturn() {
                     'Paypal checkout capture API Error'
                 ));
                 $order->update_status('failed');
-                redirectToCheckoutPage();
+                ep_paypal_redirect_to_checkout_page();
             }
             $responseBody = wp_remote_retrieve_body($request);
             $data = json_decode($responseBody);
             if (empty($data)) {
-                csPaypalErrorLog($responseBody, "$method empty response!");
+                ep_paypal_error_log($responseBody, "$method empty response!");
                 wc_add_notice(__('Your PayPal checkout session has expired. Please check out again.[4]', 'wootify'), 'error');
                 $order->update_status('failed');
                 $order->add_order_note(sprintf(
@@ -165,7 +162,7 @@ function handleReturn() {
                     $proxyUrl,
                     'Paypal checkout capture API response empty'
                 ));
-                redirectToCheckoutPage();
+                ep_paypal_redirect_to_checkout_page();
             }
 
             if (!$data->success) {
@@ -178,7 +175,7 @@ function handleReturn() {
                     ));
                     $order->update_status('failed');
                 }
-                redirectToCheckoutPage();
+                ep_paypal_redirect_to_checkout_page();
             }
             $transaction_id = $data->transaction_id;
 
@@ -225,7 +222,7 @@ function handleReturn() {
                 );
             }
 
-            csPaypalSaveTransactionId($order, wc_clean($transaction_id));
+            ep_paypal_save_transaction_id($order, wc_clean($transaction_id));
             $order->update_meta_data(METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_NOT_SYNCED);
             $order->save_meta_data();
             // Empty cart
@@ -239,7 +236,7 @@ function handleReturn() {
                 $proxyUrl,
                 'Customer canceled and returned to merchant'
             ));
-            redirectToCheckoutPage();
+            ep_paypal_redirect_to_checkout_page();
         }
     }
 
@@ -261,7 +258,7 @@ function handleReturn() {
                     $_GET['proxy_site'],
                     "Customer's zipcode is blacklisted"
                 ));
-                csPaypalSendMailOrderBlacklisted($order->get_id());
+                ep_paypal_send_mail_order_blacklisted($order->get_id());
                 wc_add_notice('PAYPAL_ACCOUNT_RESTRICTED, Please contact the merchant for more information.', 'error');
                 break;
             case 'customer_email_not_allow':
@@ -270,7 +267,7 @@ function handleReturn() {
                     $_GET['proxy_site'],
                     "Customer's email is blacklisted"
                 ));
-                csPaypalSendMailOrderBlacklisted($order->get_id());
+                ep_paypal_send_mail_order_blacklisted($order->get_id());
                 wc_add_notice('We cannot process your payment right now. Please try again with another payment method.', 'error');
                 break;
             case 'states_cities_not_allow':
@@ -279,7 +276,7 @@ function handleReturn() {
                     $_GET['proxy_site'],
                     "Customer's State and City is blacklisted"
                 ));
-                csPaypalSendMailOrderBlacklisted($order->get_id());
+                ep_paypal_send_mail_order_blacklisted($order->get_id());
                 wc_add_notice('Sorry, Your selected products are not available to purchase due to our policy violation.', 'error');
                 break;
             case 'order_total_not_allow':
@@ -299,11 +296,11 @@ function handleReturn() {
                 wc_add_notice('We cannot process your payment right now. Please try again with another payment method.', 'error');
                 break;
         }
-        redirectToCheckoutPage();
+        ep_paypal_redirect_to_checkout_page();
     }
 
     if (isset($_GET['wootify-paypal-note-debug'])) {
-        csPaypalDebugLog($_GET, "paypal pp_order_id debug");
+        ep_paypal_debug_log($_GET, "paypal pp_order_id debug");
         exit();
     }
 
@@ -325,24 +322,24 @@ function handleReturn() {
             ])
         ]);
         if (is_wp_error($response)) {
-            csPaypalErrorLog($response, "pp request checkout error[12]");
+            ep_paypal_error_log($response, "pp request checkout error[12]");
         }
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body);
         if ($data->status === 'failed' && isset($data->error_detail)) {
-            csPaypalErrorLog($body, 'wootify-paypal-button-create-order FAIL');
+            ep_paypal_error_log($body, 'wootify-paypal-button-create-order FAIL');
             if (in_array($data->error_detail, ['PAYEE_ACCOUNT_LOCKED_OR_CLOSED', 'PAYEE_ACCOUNT_RESTRICTED'])) {
                 if ($isEnableEndpointMode) {
                     Shield_PayPal_Endpoint_Client::report_transaction(null, 0, $order->get_id() ?? 0, 'USD');
                 } else {
-                    if (isEnabledAmountRotation()) {
-                        performProxyAmountRotation($activatedProxy, 0);
+                    if (ep_paypal_is_enabled_amount_rotation()) {
+                        ep_paypal_perform_proxy_amount_rotation($activatedProxy, 0);
                     } else {
-                        performProxyByTimeRotation($activatedProxy);
+                        ep_paypal_perform_proxy_by_time_rotation($activatedProxy);
                     }
-                    moveToUnusedProxyIdsRestrictAccount([$activatedProxy['id']]);
+                    ep_paypal_move_to_unused_proxy_ids_restrict_account([$activatedProxy['id']]);
                 }
-                csPaypalSendMailShieldDie($activatedProxy['url']);
+                ep_paypal_send_mail_shield_die($activatedProxy['url']);
             }
             return false;
         }
@@ -352,9 +349,9 @@ function handleReturn() {
     if (isset($_POST['wootify-paypal-button-create-woo-order']) && $_POST['pp_order_id']) {
         $cart = WC()->cart;
         if (!empty($_POST['order_id'])) {
-            handlePaypalButtonCreateWooOrderAtPayForOrder($_POST['order_id'], $_POST['pp_order_id'], $_POST['current_proxy_id'], $_POST['current_proxy_url']);
+            ep_paypal_handle_button_create_woo_order_at_pay_for_order($_POST['order_id'], $_POST['pp_order_id'], $_POST['current_proxy_id'], $_POST['current_proxy_url']);
         } else {
-            handlePaypalButtonCreateWooOrder($cart, $_POST['pp_order_id'], $_POST['current_proxy_id'], $_POST['current_proxy_url']);
+            ep_paypal_handle_button_create_woo_order($cart, $_POST['pp_order_id'], $_POST['current_proxy_id'], $_POST['current_proxy_url']);
         }
     }
 
@@ -372,7 +369,7 @@ function handleReturn() {
         } else {
             WC()->cart->add_to_cart($_POST['product_id'], $_POST['quantity']);
         }
-        $purchaseUnits = get_purchase_unit_from_cart(WC()->cart);
+        $purchaseUnits = ep_paypal_get_purchase_unit_from_cart(WC()->cart);
         echo json_encode([$purchaseUnits]);
         exit();
     }
@@ -385,28 +382,24 @@ function handleReturn() {
 
     if (isset($_POST['wootify-paypal-button-calculate-to-get-purchase-units'])) {
         if (isset($_POST['order_id']) && !empty($_POST['order_id'])) {
-            $purchaseUnits = get_purchase_unit_from_order(wc_get_order(get_query_var('order-pay')));
+            $purchaseUnits = ep_paypal_get_purchase_unit_from_order(wc_get_order(get_query_var('order-pay')));
         } else {
-            $purchaseUnits = get_purchase_unit_from_cart(WC()->cart);
+            $purchaseUnits = ep_paypal_get_purchase_unit_from_cart(WC()->cart);
         }
         echo json_encode([$purchaseUnits]);
         exit();
     }
 }
 
-function cs_pp_get_setting_value($key, $default = null) {
-    $settings = get_option('woocommerce_wootify_paypal_settings', []);
+function ep_paypal_get_setting_value($key, $default = null) {
+    $settings = get_option('woocommerce_endpoint_paypal_settings', []);
     if (!empty($settings) && array_key_exists($key, $settings)) {
         return $settings[$key];
-    }
-    $legacy = get_option('woocommerce_paypal_settings', []);
-    if (!empty($legacy) && array_key_exists($key, $legacy)) {
-        return $legacy[$key];
     }
     return $default;
 }
 
-function cs_pp_normalize_checkout_base($baseUrl) {
+function ep_paypal_normalize_checkout_base($baseUrl) {
     $parsed = wp_parse_url($baseUrl);
     if (!$parsed) {
         return rtrim($baseUrl, '/') . '/checkouts/';
@@ -418,12 +411,12 @@ function cs_pp_normalize_checkout_base($baseUrl) {
     return $baseUrl;
 }
 
-function cs_pp_build_proxy_url($baseUrl, $params) {
-    $baseUrl = cs_pp_normalize_checkout_base($baseUrl);
+function ep_paypal_build_proxy_url($baseUrl, $params) {
+    $baseUrl = ep_paypal_normalize_checkout_base($baseUrl);
     return add_query_arg($params, $baseUrl);
 }
 
-function cs_pp_get_nested_value($source, $path, $default = '') {
+function ep_paypal_get_nested_value($source, $path, $default = '') {
     $value = $source;
     foreach ($path as $key) {
         if (is_object($value) && isset($value->{$key})) {
@@ -439,45 +432,45 @@ function cs_pp_get_nested_value($source, $path, $default = '') {
     return $value === null ? $default : $value;
 }
 
-function cs_pp_clean_checkout_value($value) {
+function ep_paypal_clean_checkout_value($value) {
     if (is_array($value) || is_object($value)) {
         return '';
     }
     return sanitize_text_field(wp_unslash((string) $value));
 }
 
-function cs_pp_get_checkout_post_value($key) {
+function ep_paypal_get_checkout_post_value($key) {
     if (isset($_POST[$key])) {
-        return cs_pp_clean_checkout_value($_POST[$key]);
+        return ep_paypal_clean_checkout_value($_POST[$key]);
     }
     return '';
 }
 
-function cs_pp_get_customer_value($type, $field) {
+function ep_paypal_get_customer_value($type, $field) {
     if (!function_exists('WC') || !WC()->customer) {
         return '';
     }
 
     $method = 'get_' . $type . '_' . $field;
     if (is_callable([WC()->customer, $method])) {
-        return cs_pp_clean_checkout_value(WC()->customer->{$method}());
+        return ep_paypal_clean_checkout_value(WC()->customer->{$method}());
     }
 
     return '';
 }
 
-function cs_pp_get_checkout_field($type, $field) {
-    $value = cs_pp_get_checkout_post_value($type . '_' . $field);
+function ep_paypal_get_checkout_field($type, $field) {
+    $value = ep_paypal_get_checkout_post_value($type . '_' . $field);
     if ($value !== '') {
         return $value;
     }
 
-    return cs_pp_get_customer_value($type, $field);
+    return ep_paypal_get_customer_value($type, $field);
 }
 
-function cs_pp_first_non_empty($values) {
+function ep_paypal_first_non_empty($values) {
     foreach ($values as $value) {
-        $value = cs_pp_clean_checkout_value($value);
+        $value = ep_paypal_clean_checkout_value($value);
         if ($value !== '') {
             return $value;
         }
@@ -485,23 +478,23 @@ function cs_pp_first_non_empty($values) {
     return '';
 }
 
-function cs_pp_build_checkout_addresses($ppOrder) {
-    $payerCountry = cs_pp_get_nested_value($ppOrder, ['payer', 'address', 'country_code']);
-    $payerPhone = cs_pp_get_nested_value($ppOrder, ['payer', 'phone', 'phone_number', 'national_number']);
-    $paypalShipping = cs_pp_get_nested_value($ppOrder, ['purchase_units', 0, 'shipping'], null);
+function ep_paypal_build_checkout_addresses($ppOrder) {
+    $payerCountry = ep_paypal_get_nested_value($ppOrder, ['payer', 'address', 'country_code']);
+    $payerPhone = ep_paypal_get_nested_value($ppOrder, ['payer', 'phone', 'phone_number', 'national_number']);
+    $paypalShipping = ep_paypal_get_nested_value($ppOrder, ['purchase_units', 0, 'shipping'], null);
 
     $paypalAddress = [
-        'first_name' => cs_pp_get_nested_value($paypalShipping, ['name', 'full_name']),
-        'address_1' => cs_pp_get_nested_value($paypalShipping, ['address', 'address_line_1']),
-        'address_2' => cs_pp_get_nested_value($paypalShipping, ['address', 'address_line_2']),
-        'city' => cs_pp_get_nested_value($paypalShipping, ['address', 'admin_area_2']),
-        'state' => cs_pp_get_nested_value($paypalShipping, ['address', 'admin_area_1']),
-        'postcode' => cs_pp_get_nested_value($paypalShipping, ['address', 'postal_code']),
-        'country' => cs_pp_get_nested_value($paypalShipping, ['address', 'country_code']),
+        'first_name' => ep_paypal_get_nested_value($paypalShipping, ['name', 'full_name']),
+        'address_1' => ep_paypal_get_nested_value($paypalShipping, ['address', 'address_line_1']),
+        'address_2' => ep_paypal_get_nested_value($paypalShipping, ['address', 'address_line_2']),
+        'city' => ep_paypal_get_nested_value($paypalShipping, ['address', 'admin_area_2']),
+        'state' => ep_paypal_get_nested_value($paypalShipping, ['address', 'admin_area_1']),
+        'postcode' => ep_paypal_get_nested_value($paypalShipping, ['address', 'postal_code']),
+        'country' => ep_paypal_get_nested_value($paypalShipping, ['address', 'country_code']),
     ];
 
-    $payerFirstName = cs_pp_get_nested_value($ppOrder, ['payer', 'name', 'given_name']);
-    $payerLastName = cs_pp_get_nested_value($ppOrder, ['payer', 'name', 'surname']);
+    $payerFirstName = ep_paypal_get_nested_value($ppOrder, ['payer', 'name', 'given_name']);
+    $payerLastName = ep_paypal_get_nested_value($ppOrder, ['payer', 'name', 'surname']);
     if ($paypalAddress['first_name'] !== '' && ($payerFirstName === '' || $payerLastName === '')) {
         $nameParts = preg_split('/\s+/', trim($paypalAddress['first_name']), 2);
         $payerFirstName = $payerFirstName !== '' ? $payerFirstName : ($nameParts[0] ?? '');
@@ -509,27 +502,27 @@ function cs_pp_build_checkout_addresses($ppOrder) {
     }
 
     $billing = [
-        'first_name' => cs_pp_first_non_empty([$payerFirstName, cs_pp_get_checkout_field('billing', 'first_name'), cs_pp_get_checkout_field('shipping', 'first_name')]),
-        'last_name' => cs_pp_first_non_empty([$payerLastName, cs_pp_get_checkout_field('billing', 'last_name'), cs_pp_get_checkout_field('shipping', 'last_name')]),
-        'email' => cs_pp_first_non_empty([cs_pp_get_nested_value($ppOrder, ['payer', 'email_address']), cs_pp_get_checkout_field('billing', 'email')]),
-        'address_1' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'address_1'), $paypalAddress['address_1'], cs_pp_get_checkout_field('shipping', 'address_1')]),
-        'address_2' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'address_2'), $paypalAddress['address_2'], cs_pp_get_checkout_field('shipping', 'address_2')]),
-        'city' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'city'), $paypalAddress['city'], cs_pp_get_checkout_field('shipping', 'city')]),
-        'state' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'state'), $paypalAddress['state'], cs_pp_get_checkout_field('shipping', 'state')]),
-        'postcode' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'postcode'), $paypalAddress['postcode'], cs_pp_get_checkout_field('shipping', 'postcode')]),
-        'country' => cs_pp_first_non_empty([cs_pp_get_checkout_field('billing', 'country'), $paypalAddress['country'], cs_pp_get_checkout_field('shipping', 'country'), $payerCountry]),
-        'phone' => cs_pp_first_non_empty([$payerPhone, cs_pp_get_checkout_field('billing', 'phone')]),
+        'first_name' => ep_paypal_first_non_empty([$payerFirstName, ep_paypal_get_checkout_field('billing', 'first_name'), ep_paypal_get_checkout_field('shipping', 'first_name')]),
+        'last_name' => ep_paypal_first_non_empty([$payerLastName, ep_paypal_get_checkout_field('billing', 'last_name'), ep_paypal_get_checkout_field('shipping', 'last_name')]),
+        'email' => ep_paypal_first_non_empty([ep_paypal_get_nested_value($ppOrder, ['payer', 'email_address']), ep_paypal_get_checkout_field('billing', 'email')]),
+        'address_1' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'address_1'), $paypalAddress['address_1'], ep_paypal_get_checkout_field('shipping', 'address_1')]),
+        'address_2' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'address_2'), $paypalAddress['address_2'], ep_paypal_get_checkout_field('shipping', 'address_2')]),
+        'city' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'city'), $paypalAddress['city'], ep_paypal_get_checkout_field('shipping', 'city')]),
+        'state' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'state'), $paypalAddress['state'], ep_paypal_get_checkout_field('shipping', 'state')]),
+        'postcode' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'postcode'), $paypalAddress['postcode'], ep_paypal_get_checkout_field('shipping', 'postcode')]),
+        'country' => ep_paypal_first_non_empty([ep_paypal_get_checkout_field('billing', 'country'), $paypalAddress['country'], ep_paypal_get_checkout_field('shipping', 'country'), $payerCountry]),
+        'phone' => ep_paypal_first_non_empty([$payerPhone, ep_paypal_get_checkout_field('billing', 'phone')]),
     ];
 
     $shipping = [
-        'first_name' => cs_pp_first_non_empty([$payerFirstName, cs_pp_get_checkout_field('shipping', 'first_name'), $billing['first_name']]),
-        'last_name' => cs_pp_first_non_empty([$payerLastName, cs_pp_get_checkout_field('shipping', 'last_name'), $billing['last_name']]),
-        'address_1' => cs_pp_first_non_empty([$paypalAddress['address_1'], cs_pp_get_checkout_field('shipping', 'address_1'), $billing['address_1']]),
-        'address_2' => cs_pp_first_non_empty([$paypalAddress['address_2'], cs_pp_get_checkout_field('shipping', 'address_2'), $billing['address_2']]),
-        'city' => cs_pp_first_non_empty([$paypalAddress['city'], cs_pp_get_checkout_field('shipping', 'city'), $billing['city']]),
-        'state' => cs_pp_first_non_empty([$paypalAddress['state'], cs_pp_get_checkout_field('shipping', 'state'), $billing['state']]),
-        'postcode' => cs_pp_first_non_empty([$paypalAddress['postcode'], cs_pp_get_checkout_field('shipping', 'postcode'), $billing['postcode']]),
-        'country' => cs_pp_first_non_empty([$paypalAddress['country'], cs_pp_get_checkout_field('shipping', 'country'), $billing['country'], $payerCountry]),
+        'first_name' => ep_paypal_first_non_empty([$payerFirstName, ep_paypal_get_checkout_field('shipping', 'first_name'), $billing['first_name']]),
+        'last_name' => ep_paypal_first_non_empty([$payerLastName, ep_paypal_get_checkout_field('shipping', 'last_name'), $billing['last_name']]),
+        'address_1' => ep_paypal_first_non_empty([$paypalAddress['address_1'], ep_paypal_get_checkout_field('shipping', 'address_1'), $billing['address_1']]),
+        'address_2' => ep_paypal_first_non_empty([$paypalAddress['address_2'], ep_paypal_get_checkout_field('shipping', 'address_2'), $billing['address_2']]),
+        'city' => ep_paypal_first_non_empty([$paypalAddress['city'], ep_paypal_get_checkout_field('shipping', 'city'), $billing['city']]),
+        'state' => ep_paypal_first_non_empty([$paypalAddress['state'], ep_paypal_get_checkout_field('shipping', 'state'), $billing['state']]),
+        'postcode' => ep_paypal_first_non_empty([$paypalAddress['postcode'], ep_paypal_get_checkout_field('shipping', 'postcode'), $billing['postcode']]),
+        'country' => ep_paypal_first_non_empty([$paypalAddress['country'], ep_paypal_get_checkout_field('shipping', 'country'), $billing['country'], $payerCountry]),
     ];
 
     return [
@@ -538,7 +531,7 @@ function cs_pp_build_checkout_addresses($ppOrder) {
     ];
 }
 
-function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $currentProxyUrl) {
+function ep_paypal_handle_button_create_woo_order($cart, $ppOrderId, $currentProxyId, $currentProxyUrl) {
     // Get Order info from paypal to get ship + bill address
     $isEnableEndpointMode = true;
     if ($isEnableEndpointMode) {
@@ -551,7 +544,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
     $payloadJson = json_encode([
         'order_id' => $ppOrderId,
     ]);
-    $response = wp_remote_post($getOrderUrl, shield_proxy_signed_request_args($activatedProxy, 'POST', $getOrderUrl, [
+    $response = wp_remote_post($getOrderUrl, ep_paypal_signed_request_args($activatedProxy, 'POST', $getOrderUrl, [
         '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 5 * 60,
@@ -561,11 +554,11 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         'body' => $payloadJson,
     ], $payloadJson));
     if (is_wp_error($response)) {
-        csPaypalErrorLog([$activatedProxy, $response], "handlePaypalButtonCreateWooOrder ERROR! [1]");
+        ep_paypal_error_log([$activatedProxy, $response], "ep_paypal_handle_button_create_woo_order ERROR! [1]");
     }
     $body = wp_remote_retrieve_body($response);
     $data = json_decode($body);
-    csPaypalDebugLog([$activatedProxy, $response, $body], 'wootify-paypal-get-order RESPONSE: ' . __LINE__);
+    ep_paypal_debug_log([$activatedProxy, $response, $body], 'wootify-paypal-get-order RESPONSE: ' . __LINE__);
     if ($data->status === 'failed') {
         echo json_encode([
             'result' => 'failed',
@@ -574,7 +567,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         exit();
     }
     $ppOrder = $data->order;
-    $addresses = cs_pp_build_checkout_addresses($ppOrder);
+    $addresses = ep_paypal_build_checkout_addresses($ppOrder);
     $address = $addresses['billing'];
     // Create new Order
     $checkout = WC()->checkout();
@@ -634,7 +627,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         $item_quantity = $it['quantity'];
         $productNameArr[] = $product_name . ' x ' . $item_quantity;
     }
-    $purchaseUnits = get_purchase_unit_from_order($order);
+    $purchaseUnits = ep_paypal_get_purchase_unit_from_order($order);
     $orderData = [
         'total' => $order->get_total(),
         'currency' => $order->get_currency(),
@@ -660,9 +653,9 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
     }
     $idempotencyKey = 'pp-capture-' . $order_id . '-' . $ppOrderId;
     $payloadJson = json_encode([
-        'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
+        'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($order),
     ]);
-    $proxyProcess = wp_remote_post($urlCheckout, shield_proxy_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
+    $proxyProcess = wp_remote_post($urlCheckout, ep_paypal_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
         '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 300,
@@ -673,7 +666,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         'body' => $payloadJson,
     ], $payloadJson));
     if (is_wp_error($proxyProcess)) {
-        csPaypalErrorLog($proxyProcess, "pp request checkout error[13]");
+        ep_paypal_error_log($proxyProcess, "pp request checkout error[13]");
     }
     $order->add_order_note(sprintf(
         __('Express Paypal handle order at proxy url %s', 'wootify'),
@@ -688,7 +681,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
             $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
         }
     }
-    $order->update_meta_data('_cs_paypal_checkout_page', 'express');
+    $order->update_meta_data('_ep_paypal_checkout_page', 'express');
     $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
@@ -725,12 +718,12 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
                         ]
                     );
         } else {
-            if (isEnabledAmountRotation()) {
-                performProxyAmountRotation($activatedProxy, $order->get_total());
-                updateRotationAmount($activatedProxy['id'], $order->get_total());
+            if (ep_paypal_is_enabled_amount_rotation()) {
+                ep_paypal_perform_proxy_amount_rotation($activatedProxy, $order->get_total());
+                ep_paypal_update_rotation_amount($activatedProxy['id'], $order->get_total());
             }
         }
-        csPaypalSaveTransactionId($order, $ppPayment->id);
+        ep_paypal_save_transaction_id($order, $ppPayment->id);
         $order->update_meta_data(METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_NOT_SYNCED);
         $order->save_meta_data();
         // Empty cart
@@ -761,7 +754,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
                 $getActivateProxyUrl,
                 "Customer's zipcode is blacklisted"
             ));
-            csPaypalSendMailOrderBlacklisted($order->get_id());
+            ep_paypal_send_mail_order_blacklisted($order->get_id());
             $msg_err = 'We cannot process your payment right now, please try another payment method.[23]';
         } else if ($data->code === 'customer_email_not_allow') {
             $order->add_order_note(sprintf(
@@ -769,7 +762,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
                 $getActivateProxyUrl,
                 "Customer's email is blacklisted"
             ));
-            csPaypalSendMailOrderBlacklisted($order->get_id());
+            ep_paypal_send_mail_order_blacklisted($order->get_id());
             $msg_err = 'We cannot process your payment right now, please try another payment method.[24]';
         } else if ($data->code === 'states_cities_not_allow') {
             $order->add_order_note(sprintf(
@@ -777,7 +770,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
                 $getActivateProxyUrl,
                 "Customer's State and City is blacklisted"
             ));
-            csPaypalSendMailOrderBlacklisted($order->get_id());
+            ep_paypal_send_mail_order_blacklisted($order->get_id());
             $msg_err = 'We cannot process your payment right now, please try another payment method.[25]';
         } else {
             $order->add_order_note(sprintf(
@@ -787,7 +780,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
             ));
             $msg_err = 'We cannot process your payment right now, please try another payment method.[29]';
         }
-        csPaypalDebugLog([$data, $order->get_id()], 'Paypal Checkout error!');
+        ep_paypal_debug_log([$data, $order->get_id()], 'Paypal Checkout error!');
         $order->update_status('failed');
         echo json_encode([
             'result' => 'failed',
@@ -797,7 +790,7 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
     exit();
 }
 
-function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $currentProxyId, $currentProxyUrl) {
+function ep_paypal_handle_button_create_woo_order_at_pay_for_order($order_id, $ppOrderId, $currentProxyId, $currentProxyUrl) {
     // Get Order info from paypal to get ship + bill address
     $isEnableEndpointMode = true;
     if ($isEnableEndpointMode) {
@@ -833,7 +826,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
 
         $productNameArr[] = $product_name . ' x ' . $item_quantity;
     }
-    $purchaseUnits = get_purchase_unit_from_order($order);
+    $purchaseUnits = ep_paypal_get_purchase_unit_from_order($order);
     $orderData = [
         'total' => $order->get_total(),
         'currency' => $order->get_currency(),
@@ -855,9 +848,9 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
             . '&' . http_build_query($orderData);
     }
     $payloadJson = json_encode([
-        'cs_order_detail' => getCsPaypalOrderDetailFromWcOrder($order),
+        'cs_order_detail' => ep_paypal_get_order_detail_from_wc_order($order),
     ]);
-    $proxyProcess = wp_remote_post($urlCheckout, shield_proxy_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
+    $proxyProcess = wp_remote_post($urlCheckout, ep_paypal_signed_request_args($activatedProxy, 'POST', $urlCheckout, [
         '_shield_gateway' => 'paypal',
         'sslverify' => false,
         'timeout' => 300,
@@ -867,7 +860,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
         'body' => $payloadJson,
     ], $payloadJson));
     if (is_wp_error($proxyProcess)) {
-        csPaypalErrorLog($proxyProcess, "pp request checkout error[11]");
+        ep_paypal_error_log($proxyProcess, "pp request checkout error[11]");
     }
     $order->add_order_note(sprintf(
         __('Express Paypal handle order at proxy url %s', 'wootify'),
@@ -882,7 +875,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
             $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
         }
     }
-    $order->update_meta_data('_cs_paypal_checkout_page', 'express');
+    $order->update_meta_data('_ep_paypal_checkout_page', 'express');
     $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
@@ -909,12 +902,12 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
         if ($isEnableEndpointMode) {
                     Shield_PayPal_Endpoint_Client::report_transaction($activatedProxy['shieldId'] ?? null, $order->get_total(), $order->get_id(), $order->get_currency());
         } else {
-            if (isEnabledAmountRotation()) {
-                performProxyAmountRotation($activatedProxy, $order->get_total());
-                updateRotationAmount($activatedProxy['id'], $order->get_total());
+            if (ep_paypal_is_enabled_amount_rotation()) {
+                ep_paypal_perform_proxy_amount_rotation($activatedProxy, $order->get_total());
+                ep_paypal_update_rotation_amount($activatedProxy['id'], $order->get_total());
             }
         }
-        csPaypalSaveTransactionId($order, $ppPayment->id);
+        ep_paypal_save_transaction_id($order, $ppPayment->id);
         $order->update_meta_data(METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_NOT_SYNCED);
         $order->save_meta_data();
         // Empty cart
@@ -968,7 +961,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
             ));
             $msg_err = 'We cannot process your payment right now, please try another payment method.[29]';
         }
-        csPaypalErrorLog(json_encode($data), 'Paypal Checkout error![2]');
+        ep_paypal_error_log(json_encode($data), 'Paypal Checkout error![2]');
         $order->update_status('failed');
         echo json_encode([
             'result' => 'failed',
@@ -978,7 +971,7 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
     exit();
 }
 
-function redirectToCheckoutPage() {
+function ep_paypal_redirect_to_checkout_page() {
     global $woocommerce;
     $checkout_page_url = function_exists('wc_get_cart_url') ? wc_get_checkout_url() : $woocommerce->cart->get_checkout_url();
     wp_redirect($checkout_page_url);
@@ -994,11 +987,11 @@ function ep_paypal_init_gateway_class() {
     if (is_admin()) {
         add_filter(
             'plugin_action_links_' . plugin_basename(ep_paypal_get_plugin_file()),
-            'add_settings_link'
+            'ep_paypal_add_settings_link'
         );
     }
 
-    function add_settings_link($links) {
+    function ep_paypal_add_settings_link($links) {
         $settings = array(
             'settings' => sprintf(
                 '<a href="%s">%s</a>',
@@ -1010,17 +1003,17 @@ function ep_paypal_init_gateway_class() {
     }
     require_once("endpoint-pp-gateway.php");
     $ppGatewayObj = WC_Endpoint_PayPal_Gateway::load();
-    add_action('wp_head', 'cs_pp_action_wp_head');
-    add_action('wp_footer', 'cs_pp_action_wp_footer');
-    if (cs_pp_get_setting_value('enabled_express_on_cart_page', 'no') === 'yes') {
+    add_action('wp_head', 'ep_paypal_action_wp_head');
+    add_action('wp_footer', 'ep_paypal_action_wp_footer');
+    if (ep_paypal_get_setting_value('enabled_express_on_cart_page', 'no') === 'yes') {
         add_action('woocommerce_after_cart_totals', function () {
             endpoint_paypal_add_checkout_button_at_carts(false);
         });
     }
-    if (cs_pp_get_setting_value('enabled_express_on_product_page', 'no') === 'yes') {
+    if (ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') === 'yes') {
         add_action('woocommerce_after_add_to_cart_button',  'endpoint_paypal_add_checkout_button_at_product_page');
     }
-    if (cs_pp_get_setting_value('enabled_express_on_checkout_page', 'no') === 'yes') {
+    if (ep_paypal_get_setting_value('enabled_express_on_checkout_page', 'no') === 'yes') {
         if (isset($_GET['pay_for_order'])) {
             add_action('before_woocommerce_pay',  function () {
                 endpoint_paypal_add_checkout_button_at_carts(true);
@@ -1031,12 +1024,12 @@ function ep_paypal_init_gateway_class() {
             });
         }
     }
-    function cs_pp_action_wp_head() {
+    function ep_paypal_action_wp_head() {
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         $isEnableEndpointMode = true;
         if (isset($gateways['endpoint_paypal']->enabled) && $gateways['endpoint_paypal']->enabled == 'yes') {
             echo '<meta name="referrer" content="no-referrer" />';
-            WC()->session->set('wootify-paypal-browser-fingerprint', getBrowserFingerprint());
+            WC()->session->set('wootify-paypal-browser-fingerprint', ep_paypal_get_browser_fingerprint());
             if (isset($_GET['pay_for_order']) && get_query_var('order-pay')) {
                 $orderIdProcessing = get_query_var('order-pay');
             } else {
@@ -1063,16 +1056,16 @@ function ep_paypal_init_gateway_class() {
                     WC()->session->set('wootify-paypal-processing-order-key', $csOrderKey);
                 } else {
                     $proxyProcessing = get_option(EP_PP_ACTIVE_NODE, null);
-                    if (isEnabledAmountRotation() && !isPayableProxy($proxyProcessing, 0)) {
-                        $proxyProcessing = getNextProxyAmountRotation($proxyProcessing, 0);
+                    if (ep_paypal_is_enabled_amount_rotation() && !ep_paypal_is_payable_proxy($proxyProcessing, 0)) {
+                        $proxyProcessing = ep_paypal_get_next_proxy_amount_rotation($proxyProcessing, 0);
                     }
                 }
             }
             if (empty($proxyProcessing)) {
-                if (isPaypalShieldReachAmount(0)) {
-                    csPaypalSendMailShieldReachAmount();
+                if (ep_paypal_is_shield_reach_amount(0)) {
+                    ep_paypal_send_mail_shield_reach_amount();
                 }
-                csPaypalErrorLog([
+                ep_paypal_error_log([
                     WC()->session->get('order_awaiting_payment'),
                     get_query_var('order-pay'),
                     get_option(EP_PP_NODES, []),
@@ -1081,19 +1074,19 @@ function ep_paypal_init_gateway_class() {
             }
             WC()->session->set('wootify-paypal-proxy-active-id', $proxyProcessing['id']);
             WC()->session->set('wootify-paypal-proxy-active-url', $proxyProcessing['url']);
-            echo '<link class="cs_pp_element" rel="preload" href="' . cs_pp_build_proxy_url($proxyProcessing['url'], ['paypal_checkout' => 1]) . '" as="document">';
+            echo '<link class="cs_pp_element" rel="preload" href="' . ep_paypal_build_proxy_url($proxyProcessing['url'], ['paypal_checkout' => 1]) . '" as="document">';
         }
-        cs_pp_action_backup_wp_footer();
+        ep_paypal_action_backup_wp_footer();
     }
 
-    function cs_pp_action_wp_footer() {
+    function ep_paypal_action_wp_footer() {
         $ppGatewayObj = WC_Endpoint_PayPal_Gateway::load();
         if ((is_checkout() || is_cart())) {
             echo '<div id="cs_pp_action_wp_footer_container" class="cs_pp_element">';
-            handleSomeSettingWootifyPaypal();
+            ep_paypal_handle_some_setting();
             echo '</div>';
         } else {
-            if (cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1131,7 +1124,7 @@ function ep_paypal_init_gateway_class() {
         }
     }
 
-    function cs_pp_action_backup_wp_footer() {
+    function ep_paypal_action_backup_wp_footer() {
         $ppGatewayObj = WC_Endpoint_PayPal_Gateway::load();
         if ((is_checkout() || is_cart())) {
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1167,7 +1160,7 @@ function ep_paypal_init_gateway_class() {
                 </script>";
             }
         } else {
-            if (cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1186,12 +1179,12 @@ function ep_paypal_init_gateway_class() {
                 if ($ppGatewayObj->get_option('paypal_button') === OPT_CS_PAYPAL_SETTING_CHECKOUT) {
                     $html .= '<div id="WOOTIFY_enable_paypal_card_payment" ></div>';
                 }
-                wp_register_script('WOOTIFY_js_sha1_custom', plugins_url('/assets/js/sha1.js', __FILE__) . '?v=' . uniqid(), []);
-                wp_enqueue_script('WOOTIFY_js_sha1_custom');
-                wp_register_script('WOOTIFY_js_paypal_checkout_hook_custom', plugins_url('/assets/js/checkout_hook_custom.js', __FILE__) . '?v=' . uniqid(), ['jquery']);
-                wp_enqueue_script('WOOTIFY_js_paypal_checkout_hook_custom');
-                wp_register_style('WOOTIFY_styles_pp_custom', plugins_url('assets/css/styles.css', __FILE__) . '?v=' . uniqid(), []);
-                wp_enqueue_style('WOOTIFY_styles_pp_custom');
+                wp_register_script('ep_paypal_js_sha1_custom', plugins_url('/assets/js/sha1.js', __FILE__) . '?v=' . uniqid(), []);
+                wp_enqueue_script('ep_paypal_js_sha1_custom');
+                wp_register_script('ep_paypal_js_checkout_custom', plugins_url('/assets/js/checkout_hook_custom.js', __FILE__) . '?v=' . uniqid(), ['jquery']);
+                wp_enqueue_script('ep_paypal_js_checkout_custom');
+                wp_register_style('ep_paypal_styles_custom', plugins_url('assets/css/styles.css', __FILE__) . '?v=' . uniqid(), []);
+                wp_enqueue_style('ep_paypal_styles_custom');
                 if ($ppGatewayObj->get_option('not_send_bill_address_to_paypal') === 'yes') {
                     $html .= '<div id="WOOTIFY_express_paypal_shipping_preference" data-value="NO_SHIPPING"></div>';
                 } else {
@@ -1216,7 +1209,7 @@ function ep_paypal_init_gateway_class() {
         }
     }
 
-    function handleSomeSettingWootifyPaypal() {
+    function ep_paypal_handle_some_setting() {
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         $isEnableEndpointMode = true;
         if (isset($gateways['endpoint_paypal']->enabled) && $gateways['endpoint_paypal']->enabled == 'yes') {
@@ -1267,7 +1260,7 @@ function ep_paypal_init_gateway_class() {
                     if ($ppGatewayObj->get_option('disable_credit_card_express') == 'yes') {
                         $params['disable_credit_card_express'] = 1;
                     }
-                    $proxyFullUrl = cs_pp_build_proxy_url($nextProxyUrl, $params);
+                    $proxyFullUrl = ep_paypal_build_proxy_url($nextProxyUrl, $params);
                 ?>
                     <div id="wootify-paypal-credit-form-container" style="display:none">
                         <iframe id="payment-paypal-area" referrerpolicy="no-referrer" src="<?= $proxyFullUrl ?>" height="130" frameBorder="0" style="width: 100%"></iframe>
@@ -1280,7 +1273,7 @@ function ep_paypal_init_gateway_class() {
     }
     function endpoint_paypal_add_checkout_button_at_carts($isCheckoutPage) {
         if (!$isCheckoutPage) {
-            handleSomeSettingWootifyPaypal();
+            ep_paypal_handle_some_setting();
         }
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         if (isset($gateways['endpoint_paypal']->enabled) && $gateways['endpoint_paypal']->enabled == 'yes') {
@@ -1292,8 +1285,8 @@ function ep_paypal_init_gateway_class() {
             <div id="wootify-paypal-button-setting-context" data-value="<?= $isCheckoutPage ? 'express_checkout_page' : 'carts_page' ?>" style="display:none"></div>
             <?php
             if ($nextProxyUrl && $ppBtnSetting === OPT_CS_PAYPAL_SETTING_CHECKOUT) {
-                wp_register_script('WOOTIFY_js_paypal_checkout_hook_custom', plugins_url('/assets/js/checkout_hook_custom.js', __FILE__) . '?v=' . uniqid(), ['jquery']);
-                wp_enqueue_script('WOOTIFY_js_paypal_checkout_hook_custom');
+                wp_register_script('ep_paypal_js_checkout_custom', plugins_url('/assets/js/checkout_hook_custom.js', __FILE__) . '?v=' . uniqid(), ['jquery']);
+                wp_enqueue_script('ep_paypal_js_checkout_custom');
                 $intentIframe = strtolower($ppGatewayObj->get_option('intent'));
                 $params = [
                     'paypal_checkout' => 1,
@@ -1310,7 +1303,7 @@ function ep_paypal_init_gateway_class() {
                 if ($ppGatewayObj->get_option('disable_credit_card_express') == 'yes') {
                     $params['disable_credit_card_express'] = 1;
                 }
-                $proxyFullUrl = cs_pp_build_proxy_url($nextProxyUrl, $params);
+                $proxyFullUrl = ep_paypal_build_proxy_url($nextProxyUrl, $params);
             ?>
                 <div id="cs-pp-loader-credit-custom">
                     <div class="cs-pp-spinnerWithLockIcon cs-pp-spinner" aria-busy="true">
@@ -1371,7 +1364,7 @@ function ep_paypal_init_gateway_class() {
                 if ($ppGatewayObj->get_option('disable_credit_card_express') == 'yes' || $ppGatewayObj->get_option('disable_credit_card_express_on_product_page') == 'yes') {
                     $params['disable_credit_card_express'] = 1;
                 }
-                $proxyFullUrl = cs_pp_build_proxy_url($nextProxyUrl, $params);
+                $proxyFullUrl = ep_paypal_build_proxy_url($nextProxyUrl, $params);
             ?>
                 <div id="wootify-paypal-credit-form-container-custom" <?= $isProdHasVariations ? 'style="display: none"' : '' ?>>
                     <div id="paypal-button-express-or-text" style="text-align: center" class="cs_pp_element">- OR -</div>
@@ -1384,20 +1377,20 @@ function ep_paypal_init_gateway_class() {
     }
 }
 
-register_deactivation_hook(ep_paypal_get_plugin_file(), 'cs_paypal_plugin_deactivation');
-register_activation_hook(ep_paypal_get_plugin_file(), 'cs_paypal_plugin_activation');
+register_deactivation_hook(ep_paypal_get_plugin_file(), 'ep_paypal_plugin_deactivation');
+register_activation_hook(ep_paypal_get_plugin_file(), 'ep_paypal_plugin_activation');
 add_action('woocommerce_update_option', function ($event) {
-    if ($event['id'] === 'woocommerce_paypal_settings') {
+    if ($event['id'] === 'woocommerce_endpoint_paypal_settings') {
         wp_clear_scheduled_hook('ep_paypal_cron_auto_sync');
     }
 });
-function cs_paypal_plugin_deactivation() {
+function ep_paypal_plugin_deactivation() {
     wp_clear_scheduled_hook('ep_paypal_cron_auto_sync');
     wp_clear_scheduled_hook('ep_paypal_daily');
     wp_clear_scheduled_hook('ep_paypal_config_check');
 }
 
-function cs_paypal_plugin_activation() {
+function ep_paypal_plugin_activation() {
     require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
     require_once(plugin_dir_path(__FILE__) . 'cs-advance-shipment-tracking/data.php');
     global $wpdb;
@@ -1427,7 +1420,7 @@ function cs_paypal_plugin_activation() {
                   KEY ts_slug (ts_slug)
             ) $charsetCollate;";
         dbDelta($sql);
-        $records = csPaypalGetAdvanceShipmentTrackingData();
+        $records = ep_paypal_get_advance_shipment_tracking_data();
         foreach ($records as $record) {
             $wpdb->insert($csPaypalWooShippmentProvider, $record);
         }

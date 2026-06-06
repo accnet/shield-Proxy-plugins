@@ -2,60 +2,60 @@
 /**
  * The services of the API client.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient
+ * @package EP_PayPal\ApiClient
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient;
+namespace EP_PayPal\ApiClient;
 
 use Psr\Container\ContainerInterface;
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\Bearer;
-use WooCommerce\WootifyPaypal\ApiClient\Authentication\PayPalBearer;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\BillingAgreementsEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\IdentityToken;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\LoginSeller;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\OrderEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\PartnerReferrals;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\PartnersEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\PaymentsEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\PaymentTokenEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\WebhookEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\AddressFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\AmountFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\ApplicationContextFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\AuthorizationFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\CaptureFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\ExchangeRateFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\FraudProcessorResponseFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\ItemFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\MoneyFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\OrderFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PatchCollectionFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PayeeFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PayerFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentsFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentSourceFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentTokenActionLinksFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PaymentTokenFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PlatformFeeFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\PurchaseUnitFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\SellerReceivableBreakdownFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\SellerStatusFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\ShippingFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\ShippingPreferenceFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\WebhookEventFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Factory\WebhookFactory;
-use WooCommerce\WootifyPaypal\ApiClient\Helper\Cache;
-use WooCommerce\WootifyPaypal\ApiClient\Helper\DccApplies;
-use WooCommerce\WootifyPaypal\ApiClient\Helper\OrderHelper;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\ApplicationContextRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\CustomerRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\OrderRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PartnerReferralsData;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PayeeRepository;
-use WooCommerce\WootifyPaypal\ApiClient\Repository\PayPalRequestIdRepository;
-use WooCommerce\WootifyPaypal\WcGateway\Settings\Settings;
+use EP_PayPal\ApiClient\Authentication\Bearer;
+use EP_PayPal\ApiClient\Authentication\PayPalBearer;
+use EP_PayPal\ApiClient\Endpoint\BillingAgreementsEndpoint;
+use EP_PayPal\ApiClient\Endpoint\IdentityToken;
+use EP_PayPal\ApiClient\Endpoint\LoginSeller;
+use EP_PayPal\ApiClient\Endpoint\OrderEndpoint;
+use EP_PayPal\ApiClient\Endpoint\PartnerReferrals;
+use EP_PayPal\ApiClient\Endpoint\PartnersEndpoint;
+use EP_PayPal\ApiClient\Endpoint\PaymentsEndpoint;
+use EP_PayPal\ApiClient\Endpoint\PaymentTokenEndpoint;
+use EP_PayPal\ApiClient\Endpoint\WebhookEndpoint;
+use EP_PayPal\ApiClient\Factory\AddressFactory;
+use EP_PayPal\ApiClient\Factory\AmountFactory;
+use EP_PayPal\ApiClient\Factory\ApplicationContextFactory;
+use EP_PayPal\ApiClient\Factory\AuthorizationFactory;
+use EP_PayPal\ApiClient\Factory\CaptureFactory;
+use EP_PayPal\ApiClient\Factory\ExchangeRateFactory;
+use EP_PayPal\ApiClient\Factory\FraudProcessorResponseFactory;
+use EP_PayPal\ApiClient\Factory\ItemFactory;
+use EP_PayPal\ApiClient\Factory\MoneyFactory;
+use EP_PayPal\ApiClient\Factory\OrderFactory;
+use EP_PayPal\ApiClient\Factory\PatchCollectionFactory;
+use EP_PayPal\ApiClient\Factory\PayeeFactory;
+use EP_PayPal\ApiClient\Factory\PayerFactory;
+use EP_PayPal\ApiClient\Factory\PaymentsFactory;
+use EP_PayPal\ApiClient\Factory\PaymentSourceFactory;
+use EP_PayPal\ApiClient\Factory\PaymentTokenActionLinksFactory;
+use EP_PayPal\ApiClient\Factory\PaymentTokenFactory;
+use EP_PayPal\ApiClient\Factory\PlatformFeeFactory;
+use EP_PayPal\ApiClient\Factory\PurchaseUnitFactory;
+use EP_PayPal\ApiClient\Factory\SellerReceivableBreakdownFactory;
+use EP_PayPal\ApiClient\Factory\SellerStatusFactory;
+use EP_PayPal\ApiClient\Factory\ShippingFactory;
+use EP_PayPal\ApiClient\Factory\ShippingPreferenceFactory;
+use EP_PayPal\ApiClient\Factory\WebhookEventFactory;
+use EP_PayPal\ApiClient\Factory\WebhookFactory;
+use EP_PayPal\ApiClient\Helper\Cache;
+use EP_PayPal\ApiClient\Helper\DccApplies;
+use EP_PayPal\ApiClient\Helper\OrderHelper;
+use EP_PayPal\ApiClient\Repository\ApplicationContextRepository;
+use EP_PayPal\ApiClient\Repository\CustomerRepository;
+use EP_PayPal\ApiClient\Repository\OrderRepository;
+use EP_PayPal\ApiClient\Repository\PartnerReferralsData;
+use EP_PayPal\ApiClient\Repository\PayeeRepository;
+use EP_PayPal\ApiClient\Repository\PayPalRequestIdRepository;
+use EP_PayPal\ApiClient\Compat\Settings;
 
 return array(
 	'api.host'                                  => function( ContainerInterface $container ) : string {

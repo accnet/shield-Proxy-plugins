@@ -39,6 +39,11 @@ class Shield_Stripe_Endpoint_Receiver
             'callback'            => [__CLASS__, 'handle_config_update'],
             'permission_callback' => '__return_true',
         ]);
+        register_rest_route('shield-endpoint/v1', '/stripe/config-update', [
+            'methods'             => 'POST',
+            'callback'            => [__CLASS__, 'handle_config_update'],
+            'permission_callback' => '__return_true',
+        ]);
     }
 
     /**
@@ -101,6 +106,12 @@ class Shield_Stripe_Endpoint_Receiver
             return new WP_REST_Response([
                 'success' => false,
                 'message' => 'Invalid JSON body',
+            ], 400);
+        }
+        if (($data['type'] ?? '') !== 'stripe') {
+            return new WP_REST_Response([
+                'success' => false,
+                'message' => 'Endpoint type mismatch',
             ], 400);
         }
 

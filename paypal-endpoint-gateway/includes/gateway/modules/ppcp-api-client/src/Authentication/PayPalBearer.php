@@ -2,19 +2,19 @@
 /**
  * The PayPal bearer.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Authentication
+ * @package EP_PayPal\ApiClient\Authentication
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Authentication;
+namespace EP_PayPal\ApiClient\Authentication;
 
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\RequestTrait;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Token;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-use WooCommerce\WootifyPaypal\ApiClient\Helper\Cache;
+use EP_PayPal\ApiClient\Endpoint\RequestTrait;
+use EP_PayPal\ApiClient\Entity\Token;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Helper\Cache;
 use Psr\Log\LoggerInterface;
-use WooCommerce\WootifyPaypal\WcGateway\Settings\Settings;
+use EP_PayPal\ApiClient\Compat\Settings;
 
 /**
  * Class PayPalBearer

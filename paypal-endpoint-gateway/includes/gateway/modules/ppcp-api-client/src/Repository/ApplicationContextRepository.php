@@ -2,15 +2,15 @@
 /**
  * Returns the current application context.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Repository
+ * @package EP_PayPal\ApiClient\Repository
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Repository;
+namespace EP_PayPal\ApiClient\Repository;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\ApplicationContext;
-use WooCommerce\WootifyPaypal\WcGateway\Endpoint\ReturnUrlEndpoint;
+use EP_PayPal\ApiClient\Entity\ApplicationContext;
+use EP_PayPal\ApiClient\Compat\ReturnUrlEndpoint;
 use Psr\Container\ContainerInterface;
 
 /**

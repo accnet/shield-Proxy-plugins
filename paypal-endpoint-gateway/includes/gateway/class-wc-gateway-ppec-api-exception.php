@@ -11,7 +11,7 @@ require_once( 'class-wc-gateway-ppec-api-error.php' );
 /**
  * PayPal API Exception.
  */
-class WOOTIFY_PayPal_API_Exception extends Exception {
+class EP_PayPal_API_Exception extends Exception {
 
 	public $response;
 
@@ -63,7 +63,7 @@ class WOOTIFY_PayPal_API_Exception extends Exception {
 		$this->errors   = array();
 		$error_messages = array();
 		foreach ( $errors as $value ) {
-			$error = new WOOTIFY_PayPal_API_Error( $value['code'], $value['message'], $value['long'], $value['severity'] );
+			$error = new EP_PayPal_API_Error( $value['code'], $value['message'], $value['long'], $value['severity'] );
 			$this->errors[] = $error;
 
 			/* translators: placeholders are error code and message from PayPal */

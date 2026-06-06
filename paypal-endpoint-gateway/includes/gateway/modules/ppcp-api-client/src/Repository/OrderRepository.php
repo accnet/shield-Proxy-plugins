@@ -2,18 +2,18 @@
 /**
  * PayPal order repository.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Repository
+ * @package EP_PayPal\ApiClient\Repository
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Repository;
+namespace EP_PayPal\ApiClient\Repository;
 
 use WC_Order;
-use WooCommerce\WootifyPaypal\ApiClient\Endpoint\OrderEndpoint;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Order;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
-//use WooCommerce\WootifyPaypal\WcGateway\Gateway\PayPalGateway;
+use EP_PayPal\ApiClient\Endpoint\OrderEndpoint;
+use EP_PayPal\ApiClient\Entity\Order;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
+//use EP_PayPal\WcGateway\Gateway\PayPalGateway;
 
 /**
  * Class OrderRepository

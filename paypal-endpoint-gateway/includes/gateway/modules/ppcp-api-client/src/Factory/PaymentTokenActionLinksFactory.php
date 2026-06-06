@@ -2,16 +2,16 @@
 /**
  * The factory for links from CUSTOMER_ACTION_REQUIRED v2/vault/payment-tokens response.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
 use stdClass;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PaymentTokenActionLinks;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\PaymentTokenActionLinks;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class PaymentTokenActionLinksFactory

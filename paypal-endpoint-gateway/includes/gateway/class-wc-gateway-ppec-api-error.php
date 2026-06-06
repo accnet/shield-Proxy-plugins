@@ -7,7 +7,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit; // Exit if accessed directly
 }
 
-class WOOTIFY_PayPal_API_Error {
+class EP_PayPal_API_Error {
 	public $error_code;
 	public $short_message;
 	public $long_message;

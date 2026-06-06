@@ -2,20 +2,20 @@
 /**
  * The Payer factory.
  *
- * @package WooCommerce\WootifyPaypal\ApiClient\Factory
+ * @package EP_PayPal\ApiClient\Factory
  */
 
 declare(strict_types=1);
 
-namespace WooCommerce\WootifyPaypal\ApiClient\Factory;
+namespace EP_PayPal\ApiClient\Factory;
 
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Address;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Payer;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PayerName;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PayerTaxInfo;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\Phone;
-use WooCommerce\WootifyPaypal\ApiClient\Entity\PhoneWithType;
-use WooCommerce\WootifyPaypal\ApiClient\Exception\RuntimeException;
+use EP_PayPal\ApiClient\Entity\Address;
+use EP_PayPal\ApiClient\Entity\Payer;
+use EP_PayPal\ApiClient\Entity\PayerName;
+use EP_PayPal\ApiClient\Entity\PayerTaxInfo;
+use EP_PayPal\ApiClient\Entity\Phone;
+use EP_PayPal\ApiClient\Entity\PhoneWithType;
+use EP_PayPal\ApiClient\Exception\RuntimeException;
 
 /**
  * Class PayerFactory

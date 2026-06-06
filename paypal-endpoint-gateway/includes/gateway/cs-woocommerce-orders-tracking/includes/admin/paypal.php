@@ -5,7 +5,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 if ( !in_array( 'woocommerce/woocommerce.php', apply_filters( 'active_plugins', get_option( 'active_plugins' ) ) ) ) {
     return;
 }
-class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
+class EP_PayPal_Orders_Tracking_Admin {
 	/**
 	 * @return array
 	 */
@@ -489,7 +489,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
 	public static function get_carrier( $name ) {
 		$name     = strtolower( trim( $name ) );
 		$carriers = array_map( 'strtolower', self::carriers() );
-		$search   = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::array_search_case_insensitive( $name, $carriers );
+		$search   = EP_PayPal_Orders_Tracking_Data::array_search_case_insensitive( $name, $carriers );
 		if ( $search === false ) {
 			$search = 'OTHER';
 		} else {
@@ -500,7 +500,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
 	}
 	
 	public static function get_paypal_carrier_by_slug($slug) {
-	    $carrier = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_instance()->get_shipping_carrier_by_slug($slug);
+	    $carrier = EP_PayPal_Orders_Tracking_Data::get_instance()->get_shipping_carrier_by_slug($slug);
 	    return self::get_carrier($carrier['name']);
     }
 
@@ -601,7 +601,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
 			'body'    => vi_wot_json_encode( $params )
 		);
 
-		$request        = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::wp_remote_post( $url, $arg );
+		$request        = EP_PayPal_Orders_Tracking_Data::wp_remote_post( $url, $arg );
 		$return['code'] = $request['code'];
 		if ( $request['status'] === 'success' ) {
 			$return['status'] = 'success';
@@ -639,7 +639,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
 	 * @return array
 	 */
 	public static function get_api_credentials( $method_id ) {
-		$wot           = CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_instance();
+		$wot           = EP_PayPal_Orders_Tracking_Data::get_instance();
 		$paypal_method = $wot->get_params( 'paypal_method' );
 		$search        = array_search( $method_id, $paypal_method );
 		$credentials   = array(
@@ -728,7 +728,7 @@ class CS_VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_PAYPAL {
 	}
 
 	private static function debug_log( $content ) {
-		if ( CS_VI_WOOCOMMERCE_ORDERS_TRACKING_DATA::get_instance()->get_params( 'paypal_debug' ) ) {
+		if ( EP_PayPal_Orders_Tracking_Data::get_instance()->get_params( 'paypal_debug' ) ) {
 			VI_WOOCOMMERCE_ORDERS_TRACKING_ADMIN_LOG::wc_log( $content, 'paypal-debug', 'debug' );
 		}
 	}
