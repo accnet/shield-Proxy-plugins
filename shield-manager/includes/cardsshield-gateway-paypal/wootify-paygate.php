@@ -1031,9 +1031,6 @@ function WOOTIFY_init_gateway_class() {
             'plugin_action_links_' . plugin_basename(cs_paypal_get_plugin_file()),
             'add_settings_link'
         );
-        require_once("wootify-paygate-options.php");
-        //        require_once("cs-pp-update-checker.php");
-        //        CSPayPalUpdateChecker::load();
     }
 
     function add_settings_link($links) {

@@ -705,10 +705,6 @@ function cs_stripe_handle_link_express_create_woo_order() {
 
 function WOOTIFY_add_gateway_stripe_init() {
 
-    if (is_admin()) {
-        require_once("wootify-stripe-options.php");
-    }
-
     if (!class_exists('WC_WOOTIFY_Stripe')) :
 
         class WC_WOOTIFY_Stripe {

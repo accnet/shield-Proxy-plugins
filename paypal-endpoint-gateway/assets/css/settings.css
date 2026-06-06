@@ -1,0 +1,71 @@
+/* Custom CSS for WordPress Admin Alignment */
+.wrap h1 {
+    font-size: 23px;
+    font-weight: 400;
+    margin: 0 0 15px 0;
+}
+.badge-wp {
+    display: inline-block;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+.badge-primary { background: #2271b1; color: #fff; }
+.badge-info { background: #72aee6; color: #000; }
+.badge-secondary { background: #dcdcde; color: #3c434a; }
+.badge-active { background: #dbf8e6; color: #1e7e34; border: 1px solid #c3e6cb; }
+.badge-inactive { background: #f0f0f1; color: #646970; border: 1px solid #dcdcde; }
+.badge-active-star { background: #fff8e5; color: #b25e00; border: 1px solid #ffe8b3; font-weight: 700; }
+
+/* Progress bar inside WP lists */
+.wp-progress-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.wp-progress-bar {
+    width: 100%;
+    background: #dcdcde;
+    height: 8px;
+    border-radius: 4px;
+    overflow: hidden;
+}
+.wp-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+}
+.fill-success { background: #46b450; }
+.fill-warning { background: #ffb900; }
+.fill-danger { background: #dc3232; }
+.wp-progress-text {
+    font-size: 11px;
+    color: #646970;
+}
+
+/* Row highlighting */
+.highlight-active-row {
+    background-color: #f0f6fc !important;
+}
+.wp-list-table td {
+    vertical-align: middle !important;
+}
+code {
+    font-size: 12px;
+    background: #f4f4f5;
+    padding: 2px 6px;
+    border-radius: 3px;
+}
+.inside {
+    padding: 15px;
+}
+.postbox-header {
+    border-bottom: 1px solid #c3c4c7;
+}
+.postbox-header h2 {
+    font-size: 14px;
+    padding: 8px 12px;
+    margin: 0;
+    line-height: 1.4;
+}

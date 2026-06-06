@@ -105,6 +105,21 @@ class ShieldSettings {
         $mode = $this->sanitize_webhook_mode($request->get_param('mode'));
         $webhook_store = $this->get_stripe_webhooks_store();
         $existing = $this->normalize_webhook_entry($webhook_store[$mode] ?? [], $mode);
+        $body = $request->get_json_params();
+        $cleanup_old_domain_webhooks = !empty($body['cleanupOldDomainWebhooks']) || !empty($request->get_param('cleanupOldDomainWebhooks'));
+
+        if ($cleanup_old_domain_webhooks) {
+            $cleanup = $this->cleanup_old_domain_stripe_webhooks($mode);
+            if (is_wp_error($cleanup)) {
+                return $cleanup;
+            }
+
+            if (!empty($existing['url']) && $this->is_old_domain_stripe_webhook_url($existing['url'])) {
+                $existing = $this->get_default_webhook_entry();
+                $webhook_store[$mode] = $this->normalize_webhook_entry($existing, $mode);
+                $this->update_stripe_webhooks_store($webhook_store);
+            }
+        }
 
         if (!empty($existing['endpoint_id'])) {
             $synced = $this->sync_stripe_webhook_from_stripe($mode, $existing);
@@ -1797,6 +1812,106 @@ class ShieldSettings {
         }
 
         return $base;
+    }
+
+    private function is_old_domain_stripe_webhook_url($url) {
+        $candidate = wp_parse_url((string) $url);
+        $current = wp_parse_url($this->get_site1_webhook_url());
+
+        if (!$candidate || !$current || empty($candidate['host']) || empty($current['host'])) {
+            return false;
+        }
+
+        $candidate_path = rtrim((string) ($candidate['path'] ?? ''), '/');
+        $current_path = rtrim((string) ($current['path'] ?? ''), '/');
+        if ($candidate_path !== $current_path) {
+            return false;
+        }
+
+        return strtolower((string) $candidate['host']) !== strtolower((string) $current['host']);
+    }
+
+    private function cleanup_old_domain_stripe_webhooks($mode) {
+        $keys = $this->get_mode_specific_stripe_keys($mode);
+        if (!$keys['secret_key']) {
+            return new \WP_Error('invalid_config', sprintf('Stripe %s secret key is not configured on site1.', $mode), ['status' => 400]);
+        }
+
+        require_once CARDSSHIELD_PLUGIN_DIR . '/includes/stripe-php/init.php';
+
+        $current = wp_parse_url($this->get_site1_webhook_url());
+        if (!$current || empty($current['host']) || empty($current['path'])) {
+            return new \WP_Error('invalid_config', 'Current site1 webhook URL is invalid.', ['status' => 400]);
+        }
+
+        $current_host = strtolower((string) $current['host']);
+        $current_path = rtrim((string) $current['path'], '/');
+        $deleted = [];
+
+        try {
+            $client = new \Stripe\StripeClient($keys['secret_key']);
+            $webhooks = $client->webhookEndpoints->all(['limit' => 100]);
+            $iterator = method_exists($webhooks, 'autoPagingIterator')
+                ? $webhooks->autoPagingIterator()
+                : ($webhooks->data ?? []);
+
+            foreach ($iterator as $webhook) {
+                $url = isset($webhook->url) ? (string) $webhook->url : '';
+                $parts = wp_parse_url($url);
+                if (!$parts || empty($parts['host']) || empty($parts['path'])) {
+                    continue;
+                }
+
+                $host = strtolower((string) $parts['host']);
+                $path = rtrim((string) $parts['path'], '/');
+                if ($path !== $current_path || $host === $current_host) {
+                    continue;
+                }
+
+                if (!$this->stripe_webhook_events_match($webhook)) {
+                    continue;
+                }
+
+                $endpoint_id = isset($webhook->id) ? (string) $webhook->id : '';
+                if ($endpoint_id === '') {
+                    continue;
+                }
+
+                $client->webhookEndpoints->delete($endpoint_id);
+                $deleted[] = [
+                    'endpoint_id' => $endpoint_id,
+                    'url' => $url,
+                ];
+            }
+
+            if (!empty($deleted)) {
+                $this->log_stripe_webhook('info', 'Old-domain Stripe webhooks deleted before recreate', [
+                    'mode' => $mode,
+                    'deleted' => $deleted,
+                ]);
+            }
+
+            return [
+                'deleted' => $deleted,
+            ];
+        } catch (\Throwable $e) {
+            return new \WP_Error('stripe_webhook_cleanup_failed', $e->getMessage(), ['status' => 400]);
+        }
+    }
+
+    private function stripe_webhook_events_match($webhook) {
+        $enabled_events = isset($webhook->enabled_events) ? (array) $webhook->enabled_events : [];
+        if (empty($enabled_events)) {
+            return false;
+        }
+
+        foreach (self::STRIPE_WEBHOOK_EVENTS as $event) {
+            if (!in_array($event, $enabled_events, true)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private function create_stripe_webhook_on_stripe($mode) {
