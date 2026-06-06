@@ -8,6 +8,21 @@ if (!function_exists('cs_stripe_get_plugin_file')) {
         return defined('SHIELD_MANAGER_PLUGIN_FILE') ? SHIELD_MANAGER_PLUGIN_FILE : __FILE__;
     }
 }
+
+if (!function_exists('cs_stripe_endpoint_gateway_is_usable')) {
+    function cs_stripe_endpoint_gateway_is_usable() {
+        $settings = get_option('woocommerce_endpoint_stripe_settings', array());
+        if (($settings['enabled'] ?? 'no') !== 'yes') {
+            return false;
+        }
+
+        return class_exists('Shield_Stripe_Endpoint_Client')
+            && Shield_Stripe_Endpoint_Client::is_connected()
+            && Shield_Stripe_Endpoint_Client::has_active_nodes()
+            && Shield_Stripe_Endpoint_Client::get_active_node();
+    }
+}
+
 register_activation_hook(cs_stripe_get_plugin_file(), 'WOOTIFY_gateway_stripe_install');
 
 require_once(plugin_dir_path(__FILE__) . 'utils.php');
@@ -768,6 +783,11 @@ function WOOTIFY_add_gateway_stripe_init() {
 
             public function check_cs_stripe_payment_gateways($gateways) {
                 if (!is_checkout() && !defined('WOOCOMMERCE_CHECKOUT')) {
+                    return $gateways;
+                }
+
+                if (function_exists('cs_stripe_endpoint_gateway_is_usable') && cs_stripe_endpoint_gateway_is_usable()) {
+                    unset($gateways['WOOTIFY_stripe']);
                     return $gateways;
                 }
 
@@ -1959,10 +1979,17 @@ add_action('wp_head', 'action_stripe_wp_head', 10, 1);
 
 function action_stripe_wp_head() {
     if (is_checkout()) {
+        if (cs_stripe_endpoint_gateway_is_usable()) {
+            return;
+        }
+
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         if (isset($gateways['WOOTIFY_stripe']->enabled) && $gateways['WOOTIFY_stripe']->enabled == 'yes') {
             findAndSetNextProxy();
-            echo '<link rel="preload" href="' . WC()->session->get('wootify-stripe-proxy-active-url') . '?wootify-stripe-pe-get-payment-form=1" as="document">';
+            $proxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
+            if (!empty($proxyUrl)) {
+                echo '<link rel="preload" href="' . esc_url($proxyUrl . '?wootify-stripe-pe-get-payment-form=1') . '" as="document">';
+            }
         }
     }
 }

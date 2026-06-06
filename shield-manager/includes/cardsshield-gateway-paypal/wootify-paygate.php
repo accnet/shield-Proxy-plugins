@@ -16,6 +16,32 @@ if (!function_exists('cs_paypal_get_plugin_file')) {
     }
 }
 
+if (!function_exists('cs_paypal_is_frontend_payment_context')) {
+    function cs_paypal_is_frontend_payment_context() {
+        if (is_checkout() || is_cart()) {
+            return true;
+        }
+
+        return function_exists('is_product')
+            && is_product()
+            && cs_pp_get_setting_value('enabled_express_on_product_page', 'no') === 'yes';
+    }
+}
+
+if (!function_exists('cs_paypal_endpoint_gateway_is_usable')) {
+    function cs_paypal_endpoint_gateway_is_usable() {
+        $settings = get_option('woocommerce_endpoint_paypal_settings', array());
+        if (($settings['enabled'] ?? 'no') !== 'yes') {
+            return false;
+        }
+
+        return class_exists('Shield_PayPal_Endpoint_Client')
+            && Shield_PayPal_Endpoint_Client::is_connected()
+            && Shield_PayPal_Endpoint_Client::has_active_nodes()
+            && Shield_PayPal_Endpoint_Client::get_active_node();
+    }
+}
+
 
 //Cron
 add_filter('cron_schedules', 'WOOTIFY_add_cron_interval');
@@ -1067,10 +1093,13 @@ function WOOTIFY_init_gateway_class() {
         }
     }
     function cs_pp_action_wp_head() {
+        if (!cs_paypal_is_frontend_payment_context() || cs_paypal_endpoint_gateway_is_usable()) {
+            return;
+        }
+
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         $isEnableEndpointMode = isCsPaypalEnableEndpointMode();
         if (isset($gateways['WOOTIFY_paypal']->enabled) && $gateways['WOOTIFY_paypal']->enabled == 'yes') {
-            echo '<meta name="referrer" content="no-referrer" />';
             WC()->session->set('wootify-paypal-browser-fingerprint', getBrowserFingerprint());
             if (isset($_GET['pay_for_order']) && get_query_var('order-pay')) {
                 $orderIdProcessing = get_query_var('order-pay');
@@ -1112,19 +1141,24 @@ function WOOTIFY_init_gateway_class() {
             }
             WC()->session->set('wootify-paypal-proxy-active-id', $proxyProcessing['id']);
             WC()->session->set('wootify-paypal-proxy-active-url', $proxyProcessing['url']);
+            echo '<meta name="referrer" content="no-referrer" />';
             echo '<link class="cs_pp_element" rel="preload" href="' . cs_pp_build_proxy_url($proxyProcessing['url'], ['paypal_checkout' => 1]) . '" as="document">';
         }
         cs_pp_action_backup_wp_footer();
     }
 
     function cs_pp_action_wp_footer() {
+        if (cs_paypal_endpoint_gateway_is_usable()) {
+            return;
+        }
+
         $ppGatewayObj = WC_WOOTIFY_Gateway::load();
         if ((is_checkout() || is_cart())) {
             echo '<div id="cs_pp_action_wp_footer_container" class="cs_pp_element">';
             handleSomeSettingWootifyPaypal();
             echo '</div>';
         } else {
-            if (cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (!function_exists('is_product') || !is_product() || cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1163,6 +1197,10 @@ function WOOTIFY_init_gateway_class() {
     }
 
     function cs_pp_action_backup_wp_footer() {
+        if (!cs_paypal_is_frontend_payment_context() || cs_paypal_endpoint_gateway_is_usable()) {
+            return;
+        }
+
         $ppGatewayObj = WC_WOOTIFY_Gateway::load();
         if ((is_checkout() || is_cart())) {
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1198,7 +1236,7 @@ function WOOTIFY_init_gateway_class() {
                 </script>";
             }
         } else {
-            if (cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (!function_exists('is_product') || !is_product() || cs_pp_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1471,4 +1509,3 @@ function cs_paypal_plugin_activation() {
 function WOOTIFY_pp_remove_shipping_taxes(WC_Order_Item_Shipping $item) {
     $item->set_taxes(false);
 }
-

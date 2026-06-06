@@ -1926,7 +1926,10 @@ function ep_stripe_action_wp_head() {
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         if (isset($gateways['endpoint_stripe']->enabled) && $gateways['endpoint_stripe']->enabled == 'yes') {
             ep_stripe_find_and_set_next_proxy();
-            echo '<link rel="preload" href="' . WC()->session->get('wootify-stripe-proxy-active-url') . '?wootify-stripe-pe-get-payment-form=1" as="document">';
+            $proxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
+            if (!empty($proxyUrl)) {
+                echo '<link rel="preload" href="' . esc_url($proxyUrl . '?wootify-stripe-pe-get-payment-form=1') . '" as="document">';
+            }
         }
     }
 }

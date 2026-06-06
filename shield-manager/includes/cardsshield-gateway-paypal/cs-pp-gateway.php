@@ -994,6 +994,12 @@ class WC_WOOTIFY_Gateway extends WC_Payment_Gateway {
         if ( ! is_checkout() && ! defined( 'WOOCOMMERCE_CHECKOUT' ) ) {
             return $gateways;
         }
+
+        if (function_exists('cs_paypal_endpoint_gateway_is_usable') && cs_paypal_endpoint_gateway_is_usable()) {
+            unset($gateways['WOOTIFY_paypal']);
+            return $gateways;
+        }
+
         $carTotal = WC()->cart->get_total( false );
         $isEnableEndpointMode = isCsPaypalEnableEndpointMode();
         $activeProxy = get_option( OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, null );

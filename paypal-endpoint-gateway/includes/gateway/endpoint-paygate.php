@@ -16,6 +16,18 @@ if (!function_exists('ep_paypal_get_plugin_file')) {
     }
 }
 
+if (!function_exists('ep_paypal_is_frontend_payment_context')) {
+    function ep_paypal_is_frontend_payment_context() {
+        if (is_checkout() || is_cart()) {
+            return true;
+        }
+
+        return function_exists('is_product')
+            && is_product()
+            && ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') === 'yes';
+    }
+}
+
 
 //Cron
 add_filter('cron_schedules', 'ep_paypal_add_cron_interval');
@@ -1025,10 +1037,13 @@ function ep_paypal_init_gateway_class() {
         }
     }
     function ep_paypal_action_wp_head() {
+        if (!ep_paypal_is_frontend_payment_context()) {
+            return;
+        }
+
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         $isEnableEndpointMode = true;
         if (isset($gateways['endpoint_paypal']->enabled) && $gateways['endpoint_paypal']->enabled == 'yes') {
-            echo '<meta name="referrer" content="no-referrer" />';
             WC()->session->set('wootify-paypal-browser-fingerprint', ep_paypal_get_browser_fingerprint());
             if (isset($_GET['pay_for_order']) && get_query_var('order-pay')) {
                 $orderIdProcessing = get_query_var('order-pay');
@@ -1074,6 +1089,7 @@ function ep_paypal_init_gateway_class() {
             }
             WC()->session->set('wootify-paypal-proxy-active-id', $proxyProcessing['id']);
             WC()->session->set('wootify-paypal-proxy-active-url', $proxyProcessing['url']);
+            echo '<meta name="referrer" content="no-referrer" />';
             echo '<link class="cs_pp_element" rel="preload" href="' . ep_paypal_build_proxy_url($proxyProcessing['url'], ['paypal_checkout' => 1]) . '" as="document">';
         }
         ep_paypal_action_backup_wp_footer();
@@ -1086,7 +1102,7 @@ function ep_paypal_init_gateway_class() {
             ep_paypal_handle_some_setting();
             echo '</div>';
         } else {
-            if (ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (!function_exists('is_product') || !is_product() || ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1125,6 +1141,10 @@ function ep_paypal_init_gateway_class() {
     }
 
     function ep_paypal_action_backup_wp_footer() {
+        if (!ep_paypal_is_frontend_payment_context()) {
+            return;
+        }
+
         $ppGatewayObj = WC_Endpoint_PayPal_Gateway::load();
         if ((is_checkout() || is_cart())) {
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
@@ -1160,7 +1180,7 @@ function ep_paypal_init_gateway_class() {
                 </script>";
             }
         } else {
-            if (ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
+            if (!function_exists('is_product') || !is_product() || ep_paypal_get_setting_value('enabled_express_on_product_page', 'no') !== 'yes') {
                 return;
             }
             $gateways = WC()->payment_gateways->get_available_payment_gateways();
