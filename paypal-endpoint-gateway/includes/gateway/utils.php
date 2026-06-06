@@ -40,7 +40,8 @@ if (!function_exists('ep_endpoint_signed_request_args')) {
         }
 
         $headers = isset($args['headers']) && is_array($args['headers']) ? $args['headers'] : [];
-        $signed = Shield_PayPal_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw);
+        $shieldId = is_array($proxyOrUrl) ? ($proxyOrUrl['shieldId'] ?? $proxyOrUrl['nodeId'] ?? $proxyOrUrl['id'] ?? '') : '';
+        $signed = Shield_PayPal_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw, $shieldId);
         $args['headers'] = array_merge($headers, $signed);
         return $args;
     }
@@ -84,7 +85,8 @@ if (!function_exists('shield_proxy_signed_request_args')) {
             }
             if (!empty($derivedKey)) {
                 $headers = isset($args['headers']) && is_array($args['headers']) ? $args['headers'] : [];
-                $signed = Shield_Stripe_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw);
+                $shieldId = is_array($proxyOrUrl) ? ($proxyOrUrl['shieldId'] ?? $proxyOrUrl['nodeId'] ?? $proxyOrUrl['id'] ?? '') : '';
+                $signed = Shield_Stripe_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw, $shieldId);
                 $args['headers'] = array_merge($headers, $signed);
             }
             return $args;
@@ -116,7 +118,8 @@ if (!function_exists('shield_proxy_signed_request_args')) {
             }
             if (!empty($derivedKey)) {
                 $headers = isset($args['headers']) && is_array($args['headers']) ? $args['headers'] : [];
-                $signed = Shield_PayPal_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw);
+                $shieldId = is_array($proxyOrUrl) ? ($proxyOrUrl['shieldId'] ?? $proxyOrUrl['nodeId'] ?? $proxyOrUrl['id'] ?? '') : '';
+                $signed = Shield_PayPal_Endpoint_Client::build_proxy_hmac_headers($derivedKey, $method, $url, (string) $bodyRaw, $shieldId);
                 $args['headers'] = array_merge($headers, $signed);
             }
         }

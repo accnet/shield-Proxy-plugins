@@ -420,10 +420,13 @@ class Shield_Stripe_Endpoint_Client
      * Build HMAC headers for proxy requests to site1 using derivedKey.
      *
      * @param string $derived_key  The derivedKey for this node
+     * @param string $method       HTTP method
+     * @param string $url          Request URL
      * @param string $body         Request body
+     * @param string $shield_id    Optional shield ID
      * @return array                Signed headers
      */
-    public static function build_proxy_hmac_headers($derived_key, $method, $url, $body = '')
+    public static function build_proxy_hmac_headers($derived_key, $method, $url, $body = '', $shield_id = '')
     {
         $timestamp = (string) time();
         $nonce = wp_generate_uuid4();
@@ -433,8 +436,14 @@ class Shield_Stripe_Endpoint_Client
         $query = isset($parts['query']) && $parts['query'] !== '' ? ('?' . $parts['query']) : '';
         $request_uri = $path . $query;
 
-        $manager_id = 'mgr_endpoint_stripe';
-        $key_id = 'kid_endpoint_stripe';
+        $endpoint_id = get_option(self::opt('ENDPOINT_ID'), '');
+        $manager_id = $endpoint_id ? ('mgr_' . $endpoint_id) : 'mgr_endpoint_stripe';
+        
+        if (empty($shield_id)) {
+            $active_node = self::get_active_node();
+            $shield_id = $active_node ? ($active_node['shieldId'] ?? $active_node['nodeId'] ?? $active_node['id'] ?? '') : '';
+        }
+        $key_id = $shield_id ? ('kid_' . $shield_id) : 'kid_endpoint_stripe';
 
         $canonical = implode("\n", [
             strtoupper((string) $method),
