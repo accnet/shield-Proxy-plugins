@@ -58,7 +58,11 @@ jQuery(document).ready(function ($) {
     }
 
     function handleShowHidePaypalButton() {
-        if ($('input[name="payment_method"]:checked').val() == 'endpoint_paypal' && $('#wootify-paypal-button-setting').data('value') === OPT_CS_PAYPAL_SETTING_CHECKOUT) {
+        var currentMethod = $('input[name="payment_method"]:checked').val();
+        if (currentMethod === 'WOOTIFY_paypal') {
+            return;
+        }
+        if (currentMethod == 'endpoint_paypal' && $('#wootify-paypal-button-setting').data('value') === OPT_CS_PAYPAL_SETTING_CHECKOUT) {
             $('#wootify-paypal-credit-form-container').show();
             $('#place_order').addClass('important-hide')
         } else {
