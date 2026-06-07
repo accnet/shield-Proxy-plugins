@@ -1714,10 +1714,18 @@ class ShieldSettings {
             $timestamp,
             hash('sha256', (string) $request->get_body()),
         ]), $proxy_key);
+        $canonical = hash_hmac('sha256', implode('.', [
+            $proxy_key,
+            $timestamp,
+            $request->get_method(),
+            $request_uri,
+            hash('sha256', (string) $request->get_body()),
+        ]), $proxy_key);
         $legacy = hash_hmac('sha256', $proxy_key . '.' . $timestamp, $proxy_key);
         $is_webhook_control_route = str_starts_with($request->get_route(), '/shield/v1/stripe-webhook/');
         $valid_signature = hash_equals($route_bound, $signature)
             || hash_equals($body_bound, $signature)
+            || hash_equals($canonical, $signature)
             || (!$is_webhook_control_route && hash_equals($legacy, $signature));
         if (!$valid_signature) {
             return new \WP_Error('unauthorized', 'Invalid signature', ['status' => 401]);
