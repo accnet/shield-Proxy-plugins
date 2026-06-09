@@ -95,6 +95,32 @@ if (!is_array($nodes)) {
                         </p>
 
                     <?php else: ?>
+                        <?php $has_saved_credentials = !empty($saas_url) && !empty($conn_code); ?>
+                        <?php if ($has_saved_credentials): ?>
+                            <div class="notice notice-warning inline" style="margin: 0 0 15px 0;">
+                                <p><strong>⚠️ This site was disconnected from the SaaS endpoint.</strong> You can reconnect using the saved credentials below, or enter new ones.</p>
+                            </div>
+                            <table class="form-table" role="presentation">
+                                <tbody>
+                                    <tr>
+                                        <th scope="row">SaaS URL</th>
+                                        <td><code><?php echo esc_html($saas_url); ?></code></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">Connection Code</th>
+                                        <td><code><?php echo esc_html($conn_code); ?></code></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                            <p class="submit" style="margin-bottom:0; padding-bottom:0; display: flex; gap: 10px;">
+                                <button type="button" id="btn-reconnect" class="button button-primary">
+                                    🔄 Reconnect Now
+                                </button>
+                                <button type="button" id="btn-clear-credentials" class="button button-link" style="color: #b32d2e;">
+                                    Clear saved credentials
+                                </button>
+                            </p>
+                        <?php else: ?>
                         <form id="form-connect" method="post">
                             <table class="form-table" role="presentation">
                                 <tbody>
@@ -102,7 +128,7 @@ if (!is_array($nodes)) {
                                         <th scope="row"><label for="saas_url">SaaS URL</label></th>
                                         <td>
                                             <input type="url" class="regular-text" id="saas_url" name="saas_url"
-                                                   placeholder="http://localhost:3000" value="<?php echo esc_attr($saas_url); ?>" required>
+                                                   placeholder="https://wooshield.io" value="<?php echo esc_attr($saas_url); ?>" required>
                                             <p class="description">URL base of your SaaS Shield-Proxy Manager.</p>
                                         </td>
                                     </tr>
@@ -122,6 +148,7 @@ if (!is_array($nodes)) {
                                 </button>
                             </p>
                         </form>
+                        <?php endif; ?>
                     <?php endif; ?>
                 </div>
             </div>

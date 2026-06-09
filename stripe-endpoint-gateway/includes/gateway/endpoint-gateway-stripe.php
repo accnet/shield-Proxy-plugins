@@ -932,7 +932,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 $this->id = 'endpoint_stripe'; // payment gateway plugin ID
                 $this->icon = ''; // URL of the icon that will be displayed on checkout page near your gateway name
                 $this->has_fields = true; // in case you need a custom credit card form
-                $this->method_title = 'CardsShield Gateway Stripe';
+                $this->method_title = 'Stripe Endpoint Gateway';
                 $this->order_button_text = __('Place order', 'woocommerce');
                 $this->method_description = 'Stripe Endpoint Gateway via Shield Proxy'; // will be displayed on the options page
                 $this->invoice_prefix = $this->get_option('invoice_prefix');
@@ -972,7 +972,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 add_action('woocommerce_checkout_before_customer_details', [$this, 'render_link_express_checkout'], 5);
                 add_action('wp_footer', [$this, 'render_link_express_checkout_fallback'], 20);
 
-                // process admin CardsShield Gateway Stripe
+                // process admin Stripe Endpoint Gateway
                 add_action('woocommerce_update_options_payment_gateways_' . $this->id, array($this, 'process_admin_options'));
                 // add_action( 'woocommerce_order_status_on-hold_to_processing', array( $this, 'capture_payment' ) );
                 // add_action( 'woocommerce_order_status_on-hold_to_completed', array( $this, 'capture_payment' ) );
@@ -1021,7 +1021,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 $this->form_fields = array(
                     'enabled' => array(
                         'title' => 'Enable/Disable',
-                        'label' => 'Enable CardsShield Gateway',
+                        'label' => 'Enable Stripe Endpoint Gateway',
                         'type' => 'checkbox',
                         'description' => '',
                         'default' => 'no'
@@ -1140,6 +1140,21 @@ function ep_stripe_add_gateway_stripe_init() {
                     ),
                     true
                 );
+            }
+
+            /**
+             * Check if gateway is available for use.
+             * Hides payment method at checkout when no active proxy node is available.
+             */
+            public function is_available() {
+                $parent = parent::is_available();
+                if (!$parent) {
+                    return false;
+                }
+                if (class_exists('Shield_Stripe_Endpoint_Client')) {
+                    return Shield_Stripe_Endpoint_Client::has_active_nodes();
+                }
+                return false;
             }
 
             public function render_link_express_checkout() {
@@ -1429,7 +1444,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 ?>
                     <input style="display:none;" name="wootify-stripe-payment-method-id" />
                     <iframe id="payment-stripe-area" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?' . http_build_query($params) ?>" height="200" frameBorder="0" style="width: 100%"></iframe>
-                    <iframe style="width: 100%; display: none; position: fixed; top: 0; left: 0; z-index: 99999; height: 100vh" id="payment-area-stripe-to-confirm" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url()) ?>" height="70" frameBorder="0"></iframe>
+                    <span id="endpoint-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url())) ?>"></span>
     <?php
                 }
                 ep_stripe_action_wp_footer();
@@ -1925,6 +1940,11 @@ function ep_stripe_action_wp_head() {
     if (is_checkout()) {
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         if (isset($gateways['endpoint_stripe']->enabled) && $gateways['endpoint_stripe']->enabled == 'yes') {
+            // Preconnect Stripe CDN/API to warm up DNS + TCP + TLS
+            echo '<link rel="dns-prefetch" href="https://js.stripe.com">';
+            echo '<link rel="preconnect" href="https://js.stripe.com" crossorigin>';
+            echo '<link rel="preconnect" href="https://api.stripe.com" crossorigin>';
+
             ep_stripe_find_and_set_next_proxy();
             $proxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
             if (!empty($proxyUrl)) {

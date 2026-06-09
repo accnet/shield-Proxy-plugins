@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
 }
 
 $connected = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED', 'no');
-$saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', 'http://172.19.0.1:3000');
+$saas_url = Shield_Option_Manager::get('OPT_SHIELD_SAAS_URL', 'https://wooshield.io');
 $connect_key = Shield_Option_Manager::get('OPT_SHIELD_SAAS_KEY', '');
 $connected_at = Shield_Option_Manager::get('OPT_SHIELD_SAAS_CONNECTED_AT', null);
 $has_saved_connection = !empty($saas_url) && !empty($connect_key) && !empty(Shield_Option_Manager::get('OPT_SHIELD_SAAS_HMAC_SECRET', ''));
@@ -97,7 +97,7 @@ $has_saved_connection = !empty($saas_url) && !empty($connect_key) && !empty(Shie
         <div class="row mb-4">
           <label for="saas_url" class="col-sm-3 col-form-label">SaaS Server URL</label>
           <div class="col-sm-9">
-            <input type="url" class="form-control" id="saas_url" name="saas_url" value="<?= esc_url($saas_url) ?>" placeholder="e.g. http://172.19.0.1:3000" required>
+            <input type="url" class="form-control" id="saas_url" name="saas_url" value="<?= esc_url($saas_url) ?>" placeholder="e.g. https://wooshield.io" required>
             <p class="description">Enter the endpoint of your SaaS Proxy Controller. For local Docker setups, use http://172.19.0.1:3000</p>
           </div>
         </div>

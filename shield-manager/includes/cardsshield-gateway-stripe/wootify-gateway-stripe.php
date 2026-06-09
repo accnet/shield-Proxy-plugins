@@ -1493,7 +1493,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 ?>
                     <input style="display:none;" name="wootify-stripe-payment-method-id" />
                     <iframe id="payment-stripe-area" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?' . http_build_query($params) ?>" height="200" frameBorder="0" style="width: 100%"></iframe>
-                    <iframe style="width: 100%; display: none; position: fixed; top: 0; left: 0; z-index: 99999; height: 100vh" id="payment-area-stripe-to-confirm" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url()) ?>" height="70" frameBorder="0"></iframe>
+                    <span id="endpoint-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url())) ?>"></span>
     <?php
                 }
                 action_stripe_wp_footer();
@@ -1985,6 +1985,11 @@ function action_stripe_wp_head() {
 
         $gateways = WC()->payment_gateways->get_available_payment_gateways();
         if (isset($gateways['WOOTIFY_stripe']->enabled) && $gateways['WOOTIFY_stripe']->enabled == 'yes') {
+            // Preconnect Stripe CDN/API to warm up DNS + TCP + TLS
+            echo '<link rel="dns-prefetch" href="https://js.stripe.com">';
+            echo '<link rel="preconnect" href="https://js.stripe.com" crossorigin>';
+            echo '<link rel="preconnect" href="https://api.stripe.com" crossorigin>';
+
             findAndSetNextProxy();
             $proxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
             if (!empty($proxyUrl)) {

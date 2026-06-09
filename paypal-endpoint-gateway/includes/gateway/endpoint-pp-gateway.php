@@ -359,6 +359,21 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
     }
 
     /**
+     * Check if gateway is available for use.
+     * Hides payment method at checkout when no active proxy node is available.
+     */
+    public function is_available() {
+        $parent = parent::is_available();
+        if (!$parent) {
+            return false;
+        }
+        if (class_exists('Shield_PayPal_Endpoint_Client')) {
+            return Shield_PayPal_Endpoint_Client::has_active_nodes();
+        }
+        return false;
+    }
+
+    /**
      * Get_icon function.
      *
      * @return string

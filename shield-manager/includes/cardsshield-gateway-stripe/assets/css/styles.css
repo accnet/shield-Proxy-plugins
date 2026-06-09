@@ -178,3 +178,11 @@
 .starterkit-checkout-summary .payment_method_WOOTIFY_stripe label .wootify-stripe-payment-icon:first-of-type {
     margin-left: auto !important;
 }
+
+#payment-stripe-link-area {
+    -ms-overflow-style: none !important;
+    display: block;
+    width: calc(100% + 24px) !important;
+    max-width: none !important;
+    clip-path: inset(0 24px 24px 0) !important;
+}

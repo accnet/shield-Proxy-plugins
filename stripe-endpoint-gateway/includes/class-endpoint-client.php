@@ -141,9 +141,9 @@ class Shield_Stripe_Endpoint_Client
             ]);
         }
 
-        // Clear all options
+        // Clear all options except SaaS URL and Connection Code (preserved for easy reconnect)
         $keys = [
-            'CONNECTED', 'SAAS_URL', 'CONNECTION_CODE', 'HMAC_SECRET',
+            'CONNECTED', 'HMAC_SECRET',
             'ENDPOINT_ID', 'ENDPOINT_NAME', 'TYPE', 'ENABLE_ROTATION',
             'ROTATION_METHOD', 'CONNECTED_AT', 'NODES',
         ];
@@ -188,6 +188,12 @@ class Shield_Stripe_Endpoint_Client
         }
 
         $code = wp_remote_retrieve_response_code($response);
+        if ($code === 410) {
+            self::log('SaaS disconnected this site (410 Gone) — flushing queue then auto-disconnecting');
+            self::flush_queue();  // report pending transactions before clearing config
+            self::disconnect();
+            return false;
+        }
         if ($code !== 200) {
             return false;
         }
@@ -309,6 +315,12 @@ class Shield_Stripe_Endpoint_Client
 
         $code = wp_remote_retrieve_response_code($response);
         $data = json_decode(wp_remote_retrieve_body($response), true);
+
+        if ($code === 410) {
+            self::log('report_transaction: SaaS rejected (410 Gone) — queuing for retry');
+            self::queue_transaction($payload);
+            return false;
+        }
 
         if ($code === 409) {
             // Duplicate transaction — already reported, treat as success

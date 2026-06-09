@@ -11,7 +11,7 @@
  * Plugin Name: Stripe Endpoint Gateway
  * Plugin URI:  https://wootify.dev
  * Description: WooCommerce Stripe payment gateway via Shield Proxy Endpoint - Independent rotation managed by SaaS
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: endpoint-stripe
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-define('ENDPOINT_STRIPE_VERSION', '1.0.0');
+define('ENDPOINT_STRIPE_VERSION', '1.0.1');
 define('ENDPOINT_STRIPE_PLUGIN_FILE', __FILE__);
 define('ENDPOINT_STRIPE_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ENDPOINT_STRIPE_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -128,6 +128,30 @@ add_action('wp_ajax_endpoint_stripe_set_active_node', function () {
 
     Shield_Stripe_Endpoint_Client::update_active_node_by_shield_id($shield_id);
     wp_send_json_success(['message' => 'Active node updated successfully']);
+});
+
+add_action('wp_ajax_endpoint_stripe_reconnect', function () {
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'Unauthorized'], 403);
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'endpoint_stripe_nonce')) wp_send_json_error(['message' => 'Invalid security token'], 403);
+
+    $saas_url = get_option('EP_ST_SAAS_URL', '');
+    $connection_code = get_option('EP_ST_CONNECTION_CODE', '');
+
+    if (empty($saas_url) || empty($connection_code)) {
+        wp_send_json_error(['message' => 'No saved credentials found. Please enter them manually.']);
+    }
+
+    $result = Shield_Stripe_Endpoint_Client::connect($saas_url, $connection_code);
+    $result['success'] ? wp_send_json_success($result) : wp_send_json_error($result);
+});
+
+add_action('wp_ajax_endpoint_stripe_clear_credentials', function () {
+    if (!current_user_can('manage_options')) wp_send_json_error(['message' => 'Unauthorized'], 403);
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'endpoint_stripe_nonce')) wp_send_json_error(['message' => 'Invalid security token'], 403);
+
+    delete_option('EP_ST_SAAS_URL');
+    delete_option('EP_ST_CONNECTION_CODE');
+    wp_send_json_success(['message' => 'Credentials cleared']);
 });
 
 // ─── Init Hooks ───────────────────────────────────────────────────────────────

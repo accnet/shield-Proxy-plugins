@@ -18,6 +18,10 @@ jQuery(function ($) {
     }
 
     function scheduleStripeFrameWatch() {
+        // Do not interfere with 3DS confirm flow
+        if (window.pending_confirm_secret) {
+            return;
+        }
         var stripeIframe = $('#payment-stripe-area');
         if (!stripeIframe.length || !isStripePaymentSelected()) {
             return;
@@ -282,6 +286,7 @@ jQuery(function ($) {
             var linkHeight = parseInt(event.data.value, 10);
             if (linkHeight > 0) {
                 $('#payment-stripe-link-area').attr('height', linkHeight + 8);
+                $('#payment-stripe-link-area').css('height', (linkHeight + 8) + 'px');
             }
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkStart') {
@@ -307,15 +312,16 @@ jQuery(function ($) {
         }
         if (typeof event.data === 'object' && event.data.name === 'wootify-confirmPaymentIntentStripeReady') {
             console.log("Stripe iframe confirm is ready.");
+            // Clear retry timer to prevent double-send
+            if (window.cs_confirm_retry_timer) {
+                clearTimeout(window.cs_confirm_retry_timer);
+                window.cs_confirm_retry_timer = null;
+            }
             window.cs_confirm_iframe_ready = true;
+            trySendConfirm();
         }
 
         if (typeof event.data === 'object' && event.data.name === 'wootify-resultConfirmPaymentIntentStripe') {
-            // Clear 3ds timeout
-            if (window.endpoint_stripe_3ds_timeout) {
-                clearTimeout(window.endpoint_stripe_3ds_timeout);
-            }
-
             // Validate attempt token
             if (event.data.attempt_token && event.data.attempt_token !== window.cs_stripe_3ds_attempt_token) {
                 console.warn("Stripe 3DS result attempt token mismatch. Expected: " + window.cs_stripe_3ds_attempt_token + ", Got: " + event.data.attempt_token);
@@ -323,16 +329,19 @@ jQuery(function ($) {
             }
 
             if (event.data.value === 'success') {
+                var orderId = window.endpoint_stripe_order_id;
+                var attemptTok = window.cs_stripe_3ds_attempt_token || '';
+                cleanupStripeConfirmFrame();
                 loadPaymentProcess();
-                $('#payment-area-stripe-to-confirm').hide();
-                window.pending_confirm_secret = null;
-                window.location.href = '/?endpoint_stripe_return_result=1&order_id=' + window.endpoint_stripe_order_id + '&attempt_token=' + (window.cs_stripe_3ds_attempt_token || '');
+                window.location.href = '/?endpoint_stripe_return_result=1&order_id=' + orderId + '&attempt_token=' + attemptTok;
             } else {
                 var error = event.data.error || { code: 'unknown', message: 'Unknown error' };
-                window.pending_confirm_secret = null;
+                var capturedOrderId = window.endpoint_stripe_order_id;
+                var capturedAttempt = window.cs_stripe_3ds_attempt_token || 'none';
+                cleanupStripeConfirmFrame();
                 $.post('/?wc-ajax=ep_stripe_add_order_note', {
-                    order_id: window.endpoint_stripe_order_id,
-                    note: 'Stripe checkout error! Error code: ' + error.code + ', Message: ' + error.message + ' (attempt: ' + (window.cs_stripe_3ds_attempt_token || 'none') + ')',
+                    order_id: capturedOrderId,
+                    note: 'Stripe checkout error! Error code: ' + error.code + ', Message: ' + error.message + ' (attempt: ' + capturedAttempt + ')',
                     security: ajax_object.cs_add_order_note_nonce
                 }).done(function (result) {
                     console.log('done: ' + result);
@@ -340,7 +349,6 @@ jQuery(function ($) {
                     console.log("Can't add order note");
                 });
                 $('#cs-stripe-loader').hide();
-                $('#payment-area-stripe-to-confirm').hide();
                 checkout_error('We cannot process your payment right now, please try another payment method.[10]');
             }
         }
@@ -511,10 +519,103 @@ jQuery(function ($) {
     window.cs_confirm_iframe_ready = false;
     window.pending_confirm_secret = null;
     window.cs_stripe_3ds_attempt_token = null;
+    window.cs_confirm_retry_count = 0;
+    window.cs_confirm_retry_timer = null;
     scheduleStripeFrameWatch();
     $(document.body).on('updated_checkout', function () {
         setTimeout(scheduleStripeFrameWatch, 500);
     });
+
+    // ── Dynamic confirm iframe helpers ────────────────────────────────────────
+
+    function getStripeConfirmUrl() {
+        var config = document.getElementById('endpoint-stripe-confirm-config');
+        if (config && config.getAttribute('data-confirm-url')) {
+            return config.getAttribute('data-confirm-url');
+        }
+        return window.endpoint_stripe_confirm_url || '';
+    }
+
+    function ensureStripeConfirmIframe() {
+        var iframe = document.getElementById('payment-area-stripe-to-confirm');
+        if (iframe) {
+            return iframe;
+        }
+
+        var confirmUrl = getStripeConfirmUrl();
+        if (!confirmUrl) {
+            return null;
+        }
+
+        // Reset ready state for the new iframe
+        window.cs_confirm_iframe_ready = false;
+
+        iframe = document.createElement('iframe');
+        iframe.id = 'payment-area-stripe-to-confirm';
+        iframe.referrerPolicy = 'no-referrer';
+        iframe.frameBorder = '0';
+        iframe.style.cssText = 'width:100%;display:none;position:fixed;top:0;left:0;z-index:99999;height:100vh';
+        // Append first, set src after — ensures contentWindow is available reliably
+        document.body.appendChild(iframe);
+        iframe.src = confirmUrl;
+
+        return iframe;
+    }
+
+    function cleanupStripeConfirmFrame() {
+        if (window.cs_confirm_retry_timer) {
+            clearTimeout(window.cs_confirm_retry_timer);
+            window.cs_confirm_retry_timer = null;
+        }
+        if (window.endpoint_stripe_3ds_timeout) {
+            clearTimeout(window.endpoint_stripe_3ds_timeout);
+            window.endpoint_stripe_3ds_timeout = null;
+        }
+
+        window.pending_confirm_secret = null;
+        window.cs_confirm_retry_count = 0;
+        window.cs_confirm_iframe_ready = false;
+
+        var iframe = document.getElementById('payment-area-stripe-to-confirm');
+        if (iframe && iframe.parentNode) {
+            iframe.parentNode.removeChild(iframe);
+        }
+    }
+
+    function trySendConfirm() {
+        if (!window.pending_confirm_secret) {
+            return;
+        }
+
+        var iframe = document.getElementById('payment-area-stripe-to-confirm');
+        if (!iframe || !iframe.contentWindow) {
+            cleanupStripeConfirmFrame();
+            checkout_error('Payment confirmation frame is not available. Please try again.');
+            return;
+        }
+
+        if (window.cs_confirm_iframe_ready) {
+            console.log('Sending wootify-requestConfirmPaymentIntentStripe to iframe, attempt: ' + window.cs_stripe_3ds_attempt_token);
+            iframe.contentWindow.postMessage({
+                name: 'wootify-requestConfirmPaymentIntentStripe',
+                value: window.pending_confirm_secret,
+                attempt_token: window.cs_stripe_3ds_attempt_token
+            }, '*');
+            return;
+        }
+
+        window.cs_confirm_retry_count = (window.cs_confirm_retry_count || 0) + 1;
+        if (window.cs_confirm_retry_count > 20) {
+            cleanupStripeConfirmFrame();
+            checkout_error('Payment confirmation frame did not load. Please try again.');
+            return;
+        }
+
+        console.log('Stripe confirm iframe not ready yet, retry ' + window.cs_confirm_retry_count + '/20...');
+        window.cs_confirm_retry_timer = setTimeout(trySendConfirm, 500);
+    }
+
+    // ── Hash change handler ───────────────────────────────────────────────────
 
     function onHashChange() {
         var partials = window.location.hash.match(/^#?cs-confirm-pi-([^:]+):(.+):(.+)$/);
@@ -526,44 +627,34 @@ jQuery(function ($) {
         window.endpoint_stripe_order_id = partials[2];
         var attemptToken = partials[3];
         window.cs_stripe_3ds_attempt_token = attemptToken;
+        window.cs_confirm_retry_count = 0;
 
         // Cleanup the URL
         window.location.hash = '';
 
         window.pending_confirm_secret = intentClientSecret;
 
+        var iframe = ensureStripeConfirmIframe();
+        if (!iframe) {
+            cleanupStripeConfirmFrame();
+            checkout_error('Payment confirmation frame could not be created. Please try again.');
+            return;
+        }
+
         $('#payment-area-stripe-to-confirm').show();
 
-        // Clear existing 3DS timeout if any
+        // Clear existing 3DS timeout if any, then set fresh 5-minute timeout
         if (window.endpoint_stripe_3ds_timeout) {
             clearTimeout(window.endpoint_stripe_3ds_timeout);
         }
-
-        // Set 5-minute timeout for 3DS confirmation
         window.endpoint_stripe_3ds_timeout = setTimeout(function () {
             if (window.pending_confirm_secret) {
                 console.error('Stripe 3DS confirmation timed out');
-                window.pending_confirm_secret = null;
-                $('#payment-area-stripe-to-confirm').hide();
+                cleanupStripeConfirmFrame();
                 checkout_error('Payment confirmation timed out. Please try again.');
             }
         }, 300000);
 
-        function trySendConfirm() {
-            if (window.cs_confirm_iframe_ready) {
-                if (window.pending_confirm_secret) {
-                    console.log('Sending wootify-requestConfirmPaymentIntentStripe to iframe, attempt: ' + attemptToken);
-                    $('#payment-area-stripe-to-confirm')[0].contentWindow.postMessage({
-                        name: 'wootify-requestConfirmPaymentIntentStripe',
-                        value: window.pending_confirm_secret,
-                        attempt_token: attemptToken
-                    }, '*');
-                }
-            } else {
-                console.log('Stripe confirm iframe not ready yet, retrying in 500ms...');
-                setTimeout(trySendConfirm, 500);
-            }
-        }
         trySendConfirm();
     }
     

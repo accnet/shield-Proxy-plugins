@@ -94,4 +94,41 @@ jQuery(function ($) {
             $btn.prop('disabled', false);
         });
     });
+
+    // Reconnect (after being kicked)
+    $('#btn-reconnect').on('click', function () {
+        var $btn = $(this).prop('disabled', true).text('Reconnecting...');
+        $.post(EndpointStripe.ajaxUrl, {
+            action: 'endpoint_stripe_reconnect',
+            nonce: EndpointStripe.nonce,
+        })
+        .done(function (res) {
+            if (res.success) {
+                showMsg('success', res.data.message || 'Reconnected!');
+                setTimeout(function () { location.reload(); }, 800);
+            } else {
+                showMsg('error', (res.data && res.data.message) || 'Reconnect failed');
+                $btn.prop('disabled', false).text('🔄 Reconnect Now');
+            }
+        })
+        .fail(function () {
+            showMsg('error', 'Network error');
+            $btn.prop('disabled', false).text('🔄 Reconnect Now');
+        });
+    });
+
+    // Clear Credentials
+    $('#btn-clear-credentials').on('click', function () {
+        if (!confirm('Clear saved credentials? You will need to enter new ones to reconnect.')) return;
+        $.post(EndpointStripe.ajaxUrl, {
+            action: 'endpoint_stripe_clear_credentials',
+            nonce: EndpointStripe.nonce,
+        })
+        .done(function () {
+            location.reload();
+        })
+        .fail(function () {
+            showMsg('error', 'Failed to clear credentials');
+        });
+    });
 });

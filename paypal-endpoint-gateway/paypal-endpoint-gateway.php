@@ -11,7 +11,7 @@
  * Plugin Name: PayPal Endpoint Gateway
  * Plugin URI:  https://wootify.dev
  * Description: WooCommerce PayPal payment gateway via Shield Proxy Endpoint - Independent rotation managed by SaaS
- * Version:     1.0.0
+ * Version:     1.0.1
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: endpoint-paypal
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-define('ENDPOINT_PAYPAL_VERSION', '1.0.0');
+define('ENDPOINT_PAYPAL_VERSION', '1.0.1');
 define('ENDPOINT_PAYPAL_PLUGIN_FILE', __FILE__);
 define('ENDPOINT_PAYPAL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ENDPOINT_PAYPAL_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -166,6 +166,42 @@ add_action('wp_ajax_endpoint_paypal_set_active_node', function () {
 
     Shield_PayPal_Endpoint_Client::update_active_node_by_shield_id($shield_id);
     wp_send_json_success(['message' => 'Active node updated successfully']);
+});
+
+add_action('wp_ajax_endpoint_paypal_reconnect', function () {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Unauthorized'], 403);
+    }
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'endpoint_paypal_nonce')) {
+        wp_send_json_error(['message' => 'Invalid security token'], 403);
+    }
+
+    $saas_url = get_option('EP_PP_SAAS_URL', '');
+    $connection_code = get_option('EP_PP_CONNECTION_CODE', '');
+
+    if (empty($saas_url) || empty($connection_code)) {
+        wp_send_json_error(['message' => 'No saved credentials found. Please enter them manually.']);
+    }
+
+    $result = Shield_PayPal_Endpoint_Client::connect($saas_url, $connection_code);
+    if ($result['success']) {
+        wp_send_json_success($result);
+    } else {
+        wp_send_json_error($result);
+    }
+});
+
+add_action('wp_ajax_endpoint_paypal_clear_credentials', function () {
+    if (!current_user_can('manage_options')) {
+        wp_send_json_error(['message' => 'Unauthorized'], 403);
+    }
+    if (!wp_verify_nonce($_POST['nonce'] ?? '', 'endpoint_paypal_nonce')) {
+        wp_send_json_error(['message' => 'Invalid security token'], 403);
+    }
+
+    delete_option('EP_PP_SAAS_URL');
+    delete_option('EP_PP_CONNECTION_CODE');
+    wp_send_json_success(['message' => 'Credentials cleared']);
 });
 
 // ─── Init Hooks ───────────────────────────────────────────────────────────────
