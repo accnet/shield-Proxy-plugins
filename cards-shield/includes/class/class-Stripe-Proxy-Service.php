@@ -47,6 +47,14 @@ class Shield_Stripe_Proxy_Service {
         ]);
 
         if (!Helpers::acquireIdempotencyLock('stripe_make_payment', $idempotencyKey, 900)) {
+            // Log duplicate event locally for admin visibility — not sent to SaaS, not counted in payment stats.
+            // Only log a partial hash of the idempotency key to avoid exposing order_id+PI combinations in logs.
+            $this->log('warning', 'Stripe duplicate make-payment request blocked by idempotency lock', [
+                'idempotency_hash' => substr(md5($idempotencyKey), 0, 8),
+                'order_id'         => isset($payload['order_id']) ? (string) $payload['order_id'] : null,
+                'manager_id'       => $this->managerId,
+                'trace_id'         => $this->traceId,
+            ]);
             return $this->errorResponse(409, 'duplicate_request', 'Duplicate make-payment request', 'duplicate_request');
         }
 

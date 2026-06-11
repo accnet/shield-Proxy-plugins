@@ -122,6 +122,8 @@ jQuery(function ($) {
             if (isStripePaymentSelected()) {
                 // Block form IMMEDIATELY when clicking Place Order
                 window.WOOTIFY_stripe_processing = true;
+                // Disable button physically to prevent double-click sending duplicate request to site1
+                $('#place_order').prop('disabled', true);
                 blockOnSubmit(WOOTIFY_checkout_form);
                 WOOTIFY_checkout_form.addClass('processing');
                 
@@ -217,6 +219,7 @@ jQuery(function ($) {
                 clearTimeout(window.WOOTIFY_stripe_timeout);
             }
             window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
             WOOTIFY_checkout_form.removeClass('processing').unblock();
         }
         if (event.data === 'wootify-loadedPaymentFormStripe') {
@@ -239,6 +242,7 @@ jQuery(function ($) {
                 clearTimeout(window.WOOTIFY_stripe_timeout);
             }
             window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
             WOOTIFY_checkout_form.removeClass('processing').unblock();
             checkout_error('We cannot process your payment right now [' + event.data.value + ']');
         }
@@ -251,6 +255,7 @@ jQuery(function ($) {
                 clearTimeout(window.WOOTIFY_stripe_timeout);
             }
             window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
             
             var paymentMethodId = event.data.value;
             WOOTIFY_checkout_form.find('[name="wootify-stripe-payment-method-id"]').val(paymentMethodId);
@@ -295,11 +300,13 @@ jQuery(function ($) {
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkCancel') {
             window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
             WOOTIFY_checkout_form.removeClass('processing').unblock();
             $('#cs-stripe-loader').hide();
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkError') {
             window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
             $('#cs-stripe-loader').hide();
             WOOTIFY_checkout_form.removeClass('processing').unblock();
             checkout_error(event.data.value || 'We cannot process your payment right now, please try another payment method.');
@@ -452,6 +459,8 @@ jQuery(function ($) {
             clearTimeout(window.WOOTIFY_stripe_timeout);
         }
         window.WOOTIFY_stripe_processing = false;
+        // Re-enable Place Order button
+        $('#place_order').prop('disabled', false);
         
         $('.woocommerce-NoticeGroup-checkout, .woocommerce-error, .woocommerce-message').remove();
         WOOTIFY_checkout_form.prepend('<div class="woocommerce-NoticeGroup woocommerce-NoticeGroup-checkout">' +
