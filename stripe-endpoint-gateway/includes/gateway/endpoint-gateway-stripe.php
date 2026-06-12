@@ -586,6 +586,13 @@ function ep_stripe_handle_link_express_create_woo_order() {
         $checkout = WC()->checkout();
         $postedData = $checkout->get_posted_data();
         $postedData['payment_method'] = 'endpoint_stripe';
+
+        // Log POST raw and posted data
+        ep_stripe_debug_log([
+            '$_POST' => $_POST,
+            '$postedData' => $postedData
+        ], 'Stripe Link: Create Woo Order Debug Start');
+
         $orderId = $checkout->create_order($postedData);
         if (is_wp_error($orderId)) {
             wp_send_json_error(['message' => $orderId->get_error_message()], 400);
@@ -594,6 +601,26 @@ function ep_stripe_handle_link_express_create_woo_order() {
         if (!$order instanceof WC_Order) {
             wp_send_json_error(['message' => 'Unable to create Woo order.'], 500);
         }
+
+        // Log created order address fields
+        ep_stripe_debug_log([
+            'order_id' => $order->get_id(),
+            'billing_first_name' => $order->get_billing_first_name(),
+            'billing_last_name' => $order->get_billing_last_name(),
+            'billing_address_1' => $order->get_billing_address_1(),
+            'billing_address_2' => $order->get_billing_address_2(),
+            'billing_city' => $order->get_billing_city(),
+            'billing_state' => $order->get_billing_state(),
+            'billing_postcode' => $order->get_billing_postcode(),
+            'billing_country' => $order->get_billing_country(),
+            'shipping_first_name' => $order->get_shipping_first_name(),
+            'shipping_last_name' => $order->get_shipping_last_name(),
+            'shipping_address_1' => $order->get_shipping_address_1(),
+            'shipping_city' => $order->get_shipping_city(),
+            'shipping_state' => $order->get_shipping_state(),
+            'shipping_postcode' => $order->get_shipping_postcode(),
+            'shipping_country' => $order->get_shipping_country(),
+        ], 'Stripe Link: Created Order Address Fields');
 
         $order->set_payment_method($gateway);
         $order->update_meta_data(METAKEY_EP_STRIPE_PROXY_URL, $activatedProxy['url']);
