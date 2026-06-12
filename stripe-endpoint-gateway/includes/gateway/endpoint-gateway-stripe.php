@@ -620,6 +620,52 @@ function ep_stripe_handle_link_express_create_woo_order() {
             }
         }
 
+        // Update WC customer session address to ensure proper shipping method calculation and layout display
+        if ( isset( WC()->customer ) ) {
+            $customer = WC()->customer;
+            $billing_fields_for_session = [
+                'billing_first_name', 'billing_last_name', 'billing_company',
+                'billing_address_1', 'billing_address_2', 'billing_city',
+                'billing_state', 'billing_postcode', 'billing_country',
+                'billing_phone', 'billing_email'
+            ];
+            foreach ($billing_fields_for_session as $field) {
+                if (isset($postedData[$field])) {
+                    $setter = 'set_' . $field;
+                    if (method_exists($customer, $setter)) {
+                        $customer->$setter($postedData[$field]);
+                    }
+                }
+            }
+
+            $shipping_fields_for_session = [
+                'shipping_first_name', 'shipping_last_name', 'shipping_company',
+                'shipping_address_1', 'shipping_address_2', 'shipping_city',
+                'shipping_state', 'shipping_postcode', 'shipping_country', 'shipping_phone'
+            ];
+            if (!empty($postedData['ship_to_different_address'])) {
+                foreach ($shipping_fields_for_session as $field) {
+                    if (isset($postedData[$field])) {
+                        $setter = 'set_' . $field;
+                        if (method_exists($customer, $setter)) {
+                            $customer->$setter($postedData[$field]);
+                        }
+                    }
+                }
+            } else {
+                foreach ($shipping_fields_for_session as $field) {
+                    $billing_field = str_replace('shipping_', 'billing_', $field);
+                    if (isset($postedData[$billing_field])) {
+                        $setter = 'set_' . $field;
+                        if (method_exists($customer, $setter)) {
+                            $customer->$setter($postedData[$billing_field]);
+                        }
+                    }
+                }
+            }
+            $customer->save();
+        }
+
         // Log POST raw and posted data
         ep_stripe_debug_log([
             '$_POST' => $_POST,
