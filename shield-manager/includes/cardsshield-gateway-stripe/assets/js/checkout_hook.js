@@ -542,8 +542,12 @@ jQuery(function ($) {
         var b = payload.billing_details || {};
         var s = payload.shipping_address || {};
 
-        var bAddress = b.address || s.address || {};
-        var sAddress = s.address || b.address || {};
+        function isAddressValid(addr) {
+            return addr && (addr.line1 || addr.city || addr.postal_code);
+        }
+
+        var bAddress = isAddressValid(b.address) ? b.address : (isAddressValid(s.address) ? s.address : {});
+        var sAddress = isAddressValid(s.address) ? s.address : (isAddressValid(b.address) ? b.address : {});
         var bName = b.name || s.name || '';
         var sName = s.name || b.name || '';
         var bPhone = b.phone || s.phone || '';

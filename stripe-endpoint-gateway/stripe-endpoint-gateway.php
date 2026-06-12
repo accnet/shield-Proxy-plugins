@@ -11,7 +11,7 @@
  * Plugin Name: Stripe Endpoint Gateway
  * Plugin URI:  https://wootify.dev
  * Description: WooCommerce Stripe payment gateway via Shield Proxy Endpoint - Independent rotation managed by SaaS
- * Version:     1.1.0
+ * Version:     1.1.1
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: endpoint-stripe

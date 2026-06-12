@@ -727,6 +727,12 @@ function cs_stripe_handle_link_express_create_woo_order() {
             }
         }
 
+        // Log POST raw and posted data
+        csStripeDebugLog([
+            '$_POST' => $_POST,
+            '$postedData' => $postedData
+        ], 'Stripe Link: Create Woo Order Debug Start');
+
         $orderId = $checkout->create_order($postedData);
         if (is_wp_error($orderId)) {
             wp_send_json_error(['message' => $orderId->get_error_message()], 400);
@@ -735,6 +741,63 @@ function cs_stripe_handle_link_express_create_woo_order() {
         if (!$order instanceof WC_Order) {
             wp_send_json_error(['message' => 'Unable to create Woo order.'], 500);
         }
+
+        // Manually override/save billing/shipping addresses directly on the $order object to ensure they are persisted
+        $order->set_billing_first_name(isset($postedData['billing_first_name']) ? $postedData['billing_first_name'] : '');
+        $order->set_billing_last_name(isset($postedData['billing_last_name']) ? $postedData['billing_last_name'] : '');
+        $order->set_billing_company(isset($postedData['billing_company']) ? $postedData['billing_company'] : '');
+        $order->set_billing_address_1(isset($postedData['billing_address_1']) ? $postedData['billing_address_1'] : '');
+        $order->set_billing_address_2(isset($postedData['billing_address_2']) ? $postedData['billing_address_2'] : '');
+        $order->set_billing_city(isset($postedData['billing_city']) ? $postedData['billing_city'] : '');
+        $order->set_billing_state(isset($postedData['billing_state']) ? $postedData['billing_state'] : '');
+        $order->set_billing_postcode(isset($postedData['billing_postcode']) ? $postedData['billing_postcode'] : '');
+        $order->set_billing_country(isset($postedData['billing_country']) ? $postedData['billing_country'] : '');
+        $order->set_billing_phone(isset($postedData['billing_phone']) ? $postedData['billing_phone'] : '');
+        $order->set_billing_email(isset($postedData['billing_email']) ? $postedData['billing_email'] : '');
+
+        if (!empty($postedData['ship_to_different_address'])) {
+            $order->set_shipping_first_name(isset($postedData['shipping_first_name']) ? $postedData['shipping_first_name'] : '');
+            $order->set_shipping_last_name(isset($postedData['shipping_last_name']) ? $postedData['shipping_last_name'] : '');
+            $order->set_shipping_company(isset($postedData['shipping_company']) ? $postedData['shipping_company'] : '');
+            $order->set_shipping_address_1(isset($postedData['shipping_address_1']) ? $postedData['shipping_address_1'] : '');
+            $order->set_shipping_address_2(isset($postedData['shipping_address_2']) ? $postedData['shipping_address_2'] : '');
+            $order->set_shipping_city(isset($postedData['shipping_city']) ? $postedData['shipping_city'] : '');
+            $order->set_shipping_state(isset($postedData['shipping_state']) ? $postedData['shipping_state'] : '');
+            $order->set_shipping_postcode(isset($postedData['shipping_postcode']) ? $postedData['shipping_postcode'] : '');
+            $order->set_shipping_country(isset($postedData['shipping_country']) ? $postedData['shipping_country'] : '');
+            $order->set_shipping_phone(isset($postedData['shipping_phone']) ? $postedData['shipping_phone'] : '');
+        } else {
+            $order->set_shipping_first_name($order->get_billing_first_name());
+            $order->set_shipping_last_name($order->get_billing_last_name());
+            $order->set_shipping_company($order->get_billing_company());
+            $order->set_shipping_address_1($order->get_billing_address_1());
+            $order->set_shipping_address_2($order->get_billing_address_2());
+            $order->set_shipping_city($order->get_billing_city());
+            $order->set_shipping_state($order->get_billing_state());
+            $order->set_shipping_postcode($order->get_billing_postcode());
+            $order->set_shipping_country($order->get_billing_country());
+            $order->set_shipping_phone($order->get_billing_phone());
+        }
+
+        // Log created order address fields
+        csStripeDebugLog([
+            'order_id' => $order->get_id(),
+            'billing_first_name' => $order->get_billing_first_name(),
+            'billing_last_name' => $order->get_billing_last_name(),
+            'billing_address_1' => $order->get_billing_address_1(),
+            'billing_address_2' => $order->get_billing_address_2(),
+            'billing_city' => $order->get_billing_city(),
+            'billing_state' => $order->get_billing_state(),
+            'billing_postcode' => $order->get_billing_postcode(),
+            'billing_country' => $order->get_billing_country(),
+            'shipping_first_name' => $order->get_shipping_first_name(),
+            'shipping_last_name' => $order->get_shipping_last_name(),
+            'shipping_address_1' => $order->get_shipping_address_1(),
+            'shipping_city' => $order->get_shipping_city(),
+            'shipping_state' => $order->get_shipping_state(),
+            'shipping_postcode' => $order->get_shipping_postcode(),
+            'shipping_country' => $order->get_shipping_country(),
+        ], 'Stripe Link: Created Order Address Fields');
 
         $order->set_payment_method($gateway);
         $order->update_meta_data(METAKEY_STRIPE_PROXY_URL, $activatedProxy['url']);
