@@ -395,6 +395,11 @@ function WOOTIFY_stripe_rotation_checker() {
     }
 }
 
+function cs_stripe_redirect_and_exit($url) {
+    wp_safe_redirect($url);
+    exit();
+}
+
 function handle_route() {
     if (isset($_POST['wootify-stripe-link-create-woo-order'])) {
         cs_stripe_handle_link_express_create_woo_order();
@@ -405,12 +410,12 @@ function handle_route() {
         $order = wc_get_order($_GET['order_id']);
         if (!$order) {
             wc_add_notice('We cannot process your payment right now, please try another payment method.[11]', 'error');
-            return wp_redirect(wc_get_checkout_url());
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
 
         // If order has already been completed/processed by another tab/attempt, redirect directly to success page
         if ($order->has_status(array('processing', 'completed', 'on-hold'))) {
-            return wp_redirect($order->get_checkout_order_received_url());
+            return cs_stripe_redirect_and_exit($order->get_checkout_order_received_url());
         }
 
         // Validate attempt token to prevent stale tabs from executing double confirms or failing the order
@@ -419,7 +424,7 @@ function handle_route() {
         if (!empty($savedAttemptToken) && $savedAttemptToken !== $requestAttemptToken) {
             csStripeErrorLog("Attempt token mismatch: order expects '{$savedAttemptToken}', got '{$requestAttemptToken}'");
             wc_add_notice('This payment attempt is outdated. Please try again.', 'error');
-            return wp_redirect(wc_get_checkout_url());
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
 
         if (!$activeProxyId = $order->get_meta(METAKEY_STRIPE_PROXY_ID)) {
@@ -430,7 +435,7 @@ function handle_route() {
         if (!$activatedProxy) {
             csStripeErrorLog("Can't find activated proxy!\n");
             wc_add_notice('We cannot accept any payments right now. Please comeback to try tomorrow or select other payment methods if available.', 'error');
-            return wp_redirect(wc_get_checkout_url());
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
         $confirmUrl = $activatedProxy['url'] . '?' . http_build_query([
             'wootify-stripe-pe-confirm-payment' => uniqid(),
@@ -458,16 +463,30 @@ function handle_route() {
             $fallback = csStripeAttemptWebhookFallback($order, $activatedProxy, csStripeGetTransactionId($order), $traceId);
             if (is_array($fallback) && !empty($fallback['handled'])) {
                 if ($fallback['type'] === 'success' || $fallback['type'] === 'processing') {
-                    return wp_redirect($order->get_checkout_order_received_url());
+                    return cs_stripe_redirect_and_exit($order->get_checkout_order_received_url());
                 }
                 wc_add_notice('We cannot process your payment right now, please try another payment method.[fallback-failed]', 'error');
-                return wp_redirect(wc_get_checkout_url());
+                return cs_stripe_redirect_and_exit(wc_get_checkout_url());
             }
             wc_add_notice('We cannot process your payment right now, please try another payment method.', 'error');
-            return wp_redirect(wc_get_checkout_url());
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
-        $body = wp_remote_retrieve_body($response);
-        $body = json_decode($body);
+        $rawBody = wp_remote_retrieve_body($response);
+        $body = json_decode($rawBody);
+        if (!is_object($body) || !isset($body->status)) {
+            csStripeErrorLog([
+                'response_body' => $rawBody,
+                'trace_id' => $traceId,
+                'proxy_url' => $activatedProxy['url'],
+                'order_id' => $order->get_id(),
+            ], 'Stripe confirm payment invalid response');
+            $fallback = csStripeAttemptWebhookFallback($order, $activatedProxy, csStripeGetTransactionId($order), $traceId);
+            if (is_array($fallback) && !empty($fallback['handled']) && ($fallback['type'] === 'success' || $fallback['type'] === 'processing')) {
+                return cs_stripe_redirect_and_exit($order->get_checkout_order_received_url());
+            }
+            wc_add_notice('We cannot process your payment right now, please try another payment method.[invalid-response]', 'error');
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
+        }
         $paymentStripeIntent = get_option('woocommerce_stripe_settings')['intent'];
 
         if ($body->status === 'success') {
@@ -509,7 +528,7 @@ function handle_route() {
             updateFeeNetOrderStripe($body->charge, $order);
             // Empty cart
             WC()->cart->empty_cart();
-            return wp_redirect($order->get_checkout_order_received_url());
+            return cs_stripe_redirect_and_exit($order->get_checkout_order_received_url());
         } else {
             csStripeErrorLog([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe confirm payment error');
             $fallbackPaymentIntentId = csStripeGetTransactionId($order);
@@ -521,12 +540,12 @@ function handle_route() {
             $fallback = csStripeAttemptWebhookFallback($order, $activatedProxy, $fallbackPaymentIntentId, $traceId);
             if (is_array($fallback) && !empty($fallback['handled'])) {
                 if ($fallback['type'] === 'success' || $fallback['type'] === 'processing') {
-                    return wp_redirect($order->get_checkout_order_received_url());
+                    return cs_stripe_redirect_and_exit($order->get_checkout_order_received_url());
                 }
             }
             // Empty cart
             $order->update_status('failed');
-            $err = $body->err;
+            $err = $body->err ?? (object) ['message' => 'Unknown Stripe confirm error'];
             $paymentIntentId = csStripeGetTransactionId($order);
             if (isset($err->payment_intent)) {
                 $paymentIntentId = $err->payment_intent->id;
@@ -535,11 +554,11 @@ function handle_route() {
             $order->add_order_note(sprintf(
                 __('Stripe charged ERROR by proxy %s, ERROR message: %s, Payment Intent ID: %s', 'wootify'),
                 $activatedProxy['url'],
-                is_string($err) ?: $err->message,
+                is_string($err) ? $err : ($err->message ?? 'Unknown Stripe confirm error'),
                 $paymentIntentId
             ));
             wc_add_notice('We cannot process your payment right now, please try another payment method.[12]', 'error');
-            return wp_redirect(wc_get_checkout_url());
+            return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
     }
 }
