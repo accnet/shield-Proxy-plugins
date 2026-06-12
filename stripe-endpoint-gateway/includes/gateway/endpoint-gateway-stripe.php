@@ -664,6 +664,18 @@ function ep_stripe_handle_link_express_create_woo_order() {
                 }
             }
             $customer->save();
+
+            // Clear shipping session cache and force recalculate cart shipping and totals
+            if ( isset( WC()->session ) ) {
+                $packages = WC()->cart->get_shipping_packages();
+                foreach ( $packages as $package_key => $package ) {
+                    $session_key = 'shipping_for_package_' . $package_key;
+                    WC()->session->__unset( $session_key );
+                }
+            }
+            WC()->shipping()->reset_shipping();
+            WC()->cart->calculate_shipping();
+            WC()->cart->calculate_totals();
         }
 
         // Log POST raw and posted data
