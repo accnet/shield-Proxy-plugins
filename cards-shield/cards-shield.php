@@ -12,7 +12,7 @@
  * Plugin Name: Cards Shield
  * Plugin URI:  https://wootify.dev
  * Description: This plugin prints "Cards Shield" inside an admin page.
- * Version:     3.0.2
+ * Version:     3.0.3
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: CS
@@ -21,7 +21,7 @@
  */
 
 define('SHIELD_MANAGE_URL', 'https://wooshield.io');
-define('CARDSSHIELD_VERSION', '3.0.2');
+define('CARDSSHIELD_VERSION', '3.0.3');
 
 define('CARDSSHIELD_PLUGIN', __FILE__);
 

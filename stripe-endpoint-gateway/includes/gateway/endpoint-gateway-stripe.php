@@ -1292,11 +1292,14 @@ function ep_stripe_add_gateway_stripe_init() {
                 if ($amount <= 0) {
                     return '';
                 }
+                $shippingAmount = $gateway->get_stripe_amount(WC()->cart->get_shipping_total(), get_woocommerce_currency());
                 $params = [
                     'wootify-stripe-link-express-form' => 1,
                     'amount' => $amount,
                     'currency' => get_woocommerce_currency(),
                     'parent_origin' => home_url(),
+                    'shipping_amount' => $shippingAmount,
+                    'shipping_label' => __('Shipping', 'woocommerce'),
                 ];
                 $iframeUrl = $nextProxyUrl . '?' . http_build_query($params);
                 ob_start();

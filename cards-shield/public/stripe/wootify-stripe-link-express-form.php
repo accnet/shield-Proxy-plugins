@@ -7,6 +7,8 @@ Helpers::checkRequest("GET", false);
 $amount = isset($_GET['amount']) ? absint($_GET['amount']) : 0;
 $currency = isset($_GET['currency']) ? strtolower(sanitize_text_field((string) $_GET['currency'])) : 'usd';
 $parent_origin = isset($_GET['parent_origin']) ? esc_url_raw((string) $_GET['parent_origin']) : '';
+$shipping_amount = isset($_GET['shipping_amount']) ? absint($_GET['shipping_amount']) : 0;
+$shipping_label  = isset($_GET['shipping_label'])  ? sanitize_text_field((string) $_GET['shipping_label']) : 'Shipping';
 $stripe_key = defined('STRIPE_PUBLISHABLE_KEY') ? STRIPE_PUBLISHABLE_KEY : '';
 $has_error = empty($stripe_key) || $amount <= 0 || empty($currency);
 ?>
@@ -43,6 +45,8 @@ $has_error = empty($stripe_key) || $amount <= 0 || empty($currency);
       window.stripeLinkAmount = <?= (int) $amount ?>;
       window.stripeLinkCurrency = "<?= esc_js($currency) ?>";
       window.parentOrigin = "<?= esc_js($parent_origin) ?>";
+      window.stripeLinkShippingAmount = <?= (int) $shipping_amount ?>;
+      window.stripeLinkShippingLabel  = "<?= esc_js($shipping_label) ?>";
     </script>
     <script src="https://js.stripe.com/v3/"></script>
     <?php

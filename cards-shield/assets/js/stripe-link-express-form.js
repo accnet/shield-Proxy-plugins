@@ -62,6 +62,19 @@ function initializeStripeLink() {
       paymentMethodTypes: ["link", "card"],
     });
 
+    // Build the shipping rate from URL params passed by WooCommerce PHP.
+    // PHP passes shipping_amount (in minor units, same scale as amount) and
+    // shipping_label (localised label, defaults to "Shipping").
+    // Stripe requires shippingRates to have at least one entry when
+    // shippingAddressRequired is true; empty [] throws IntegrationError.
+    var shippingAmount = parseInt(window.stripeLinkShippingAmount || "0", 10);
+    var shippingLabel  = window.stripeLinkShippingLabel || "Shipping";
+    var shippingRates  = [{
+      id:          "wc-shipping",
+      displayName: shippingLabel,
+      amount:      shippingAmount,
+    }];
+
     expressCheckoutElement = elements.create("expressCheckout", {
       paymentMethods: {
         link: "auto",
@@ -71,6 +84,18 @@ function initializeStripeLink() {
         amazonPay: "never",
         klarna: "never",
       },
+      shippingAddressRequired: true,
+    });
+
+    // Must handle shippingaddresschange and resolve with the shipping rates.
+    // We return the same WooCommerce-calculated rate regardless of the address
+    // the customer picks (the actual charge amount is fixed in the PaymentIntent).
+    expressCheckoutElement.on("shippingaddresschange", function (event) {
+      event.resolve({ shippingRates: shippingRates });
+    });
+
+    expressCheckoutElement.on("shippingratechange", function (event) {
+      event.resolve();
     });
 
     expressCheckoutElement.on("ready", function (event) {

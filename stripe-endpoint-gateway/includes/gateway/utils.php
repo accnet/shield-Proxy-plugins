@@ -129,7 +129,7 @@ if (!function_exists('ep_stripe_signed_request_args')) {
     }
 }
 
-defined('OPT_WOOTIFY_STRIPE_VERSION') || define('OPT_WOOTIFY_STRIPE_VERSION', '2.2.16');
+defined('OPT_WOOTIFY_STRIPE_VERSION') || define('OPT_WOOTIFY_STRIPE_VERSION', '2.2.20');
 defined('EP_ST_NODES') || define('EP_ST_NODES', 'EP_ST_NODES');
 defined('EP_ST_ACTIVE_NODE') || define('EP_ST_ACTIVE_NODE', 'EP_ST_ACTIVE_NODE');
 defined('EP_ST_ROTATION_METHOD') || define('EP_ST_ROTATION_METHOD', 'EP_ST_ROTATION_METHOD');
@@ -406,9 +406,10 @@ function ep_stripe_has_payable_proxy($cartTotal) {
 }
 
 function ep_stripe_error_log($data, $message = '') {
-    $trace = debug_backtrace();
+    $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+    $caller = isset($trace[1]) ? $trace[1] : [];
     $dataLogString = ep_stripe_handle_data_log($data, $message)
-        . print_r([$trace[1]['class'], $trace[1]['function'], $trace[1]['args']], true);
+        . print_r([$caller['class'] ?? '', $caller['function'] ?? '', []], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
     } else {
@@ -417,9 +418,10 @@ function ep_stripe_error_log($data, $message = '') {
 }
 
 function ep_stripe_debug_log($data, $message = '') {
-    $trace = debug_backtrace();
+    $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
+    $caller = isset($trace[1]) ? $trace[1] : [];
     $dataLogString = ep_stripe_handle_data_log($data, $message)
-        . print_r([$trace[1]['class'], $trace[1]['function'], $trace[1]['args']], true);
+        . print_r([$caller['class'] ?? '', $caller['function'] ?? '', []], true);
     if (!$logger = wc_get_logger()) {
         error_log($dataLogString);
     } else {

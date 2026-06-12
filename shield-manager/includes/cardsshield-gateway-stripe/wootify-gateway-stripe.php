@@ -402,8 +402,14 @@ function cs_stripe_redirect_and_exit($url) {
 
 function handle_route() {
     if (isset($_POST['wootify-stripe-link-create-woo-order'])) {
-        cs_stripe_handle_link_express_create_woo_order();
-        exit();
+        // Defer to stripe-endpoint-gateway when it is active and configured.
+        $defer = function_exists('ep_stripe_handle_link_express_create_woo_order')
+            && !empty(get_option('EP_ST_NODES', []));
+        if (!$defer) {
+            cs_stripe_handle_link_express_create_woo_order();
+            exit();
+        }
+        return;
     }
 
     if (isset($_GET['WOOTIFY_stripe_return_result']) && isset($_GET['order_id'])) {
@@ -566,6 +572,17 @@ function handle_route() {
 function cs_stripe_handle_link_express_post_route() {
     if (!isset($_POST['wootify-stripe-link-create-woo-order'])) {
         return;
+    }
+
+    // Defer to stripe-endpoint-gateway when it is active and has nodes configured.
+    // Both plugins handle the same POST action; the endpoint gateway takes priority
+    // because it manages its own proxy nodes independently of shield-manager's proxies.
+    if (function_exists('ep_stripe_handle_link_express_create_woo_order')) {
+        $ep_nodes = get_option('EP_ST_NODES', []);
+        if (!empty($ep_nodes) && is_array($ep_nodes)) {
+            // stripe-endpoint-gateway is active and configured — let it handle this.
+            return;
+        }
     }
 
     cs_stripe_handle_link_express_create_woo_order();
@@ -1336,11 +1353,14 @@ function WOOTIFY_add_gateway_stripe_init() {
                 if ($amount <= 0) {
                     return '';
                 }
+                $shippingAmount = $gateway->get_stripe_amount(WC()->cart->get_shipping_total(), get_woocommerce_currency());
                 $params = [
                     'wootify-stripe-link-express-form' => 1,
                     'amount' => $amount,
                     'currency' => get_woocommerce_currency(),
                     'parent_origin' => home_url(),
+                    'shipping_amount' => $shippingAmount,
+                    'shipping_label' => __('Shipping', 'woocommerce'),
                 ];
                 $iframeUrl = $nextProxyUrl . '?' . http_build_query($params);
                 ob_start();

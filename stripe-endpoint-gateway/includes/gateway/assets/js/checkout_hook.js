@@ -363,12 +363,6 @@ jQuery(function ($) {
             }
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkStart') {
-            if (!validateFormCheckoutForStripeLink(true)) {
-                postStripeLinkMessage({ name: 'wootify-stripeLinkCancel' });
-                checkout_error(STRIPE_LINK_REQUIRED_FIELDS_MESSAGE);
-                updateStripeLinkValidationOverlay();
-                return;
-            }
             blockOnSubmit(WOOTIFY_checkout_form);
             WOOTIFY_checkout_form.addClass('processing');
         }
@@ -460,46 +454,7 @@ jQuery(function ($) {
     }
 
     function updateStripeLinkValidationOverlay() {
-        var container = $('#wootify-stripe-link-express-container');
-        var iframe = $('#payment-stripe-link-area');
-        if (!container.length || !iframe.length || !container.is(':visible')) {
-            $('#wootify-stripe-link-validation-overlay').hide();
-            return;
-        }
-
-        if (container.css('position') === 'static') {
-            container.css('position', 'relative');
-        }
-
-        var overlay = $('#wootify-stripe-link-validation-overlay');
-        if (!overlay.length) {
-            overlay = $('<button type="button" id="wootify-stripe-link-validation-overlay" aria-label="Complete checkout fields before using Link"></button>');
-            overlay.css({
-                position: 'absolute',
-                zIndex: 20,
-                display: 'none',
-                background: 'transparent',
-                border: 0,
-                padding: 0,
-                margin: 0,
-                cursor: 'pointer'
-            });
-            container.append(overlay);
-        }
-
-        var position = iframe.position();
-        overlay.css({
-            left: position.left,
-            top: position.top,
-            width: iframe.outerWidth(),
-            height: iframe.outerHeight()
-        });
-
-        if (validateFormCheckoutForStripeLink(false)) {
-            overlay.hide();
-        } else {
-            overlay.show();
-        }
+        $('#wootify-stripe-link-validation-overlay').hide();
     }
 
     $(document).on('click', '#wootify-stripe-link-validation-overlay', function (e) {
@@ -527,9 +482,114 @@ jQuery(function ($) {
             checkout_error('Payment confirmation token is missing. Please try again.');
             return;
         }
-        if (!validateFormCheckoutForStripeLink(true)) {
-            checkout_error(STRIPE_LINK_REQUIRED_FIELDS_MESSAGE);
-            return;
+
+        // ── Autofill billing & shipping form fields from Stripe Link ─────────────
+        // IMPORTANT: We must NOT call .trigger('change') on country or state fields.
+        // Doing so causes WooCommerce to fire update_checkout → reloads checkout
+        // fragments → the Stripe Link iframe is re-rendered with a new src → the
+        // new iframe has no pendingConfirmationToken → confirmPayment never resolves
+        // → the spinner loops forever.
+        //
+        // Strategy: set all text/phone/address fields silently via .val() only.
+        // Country and state are injected directly into the POST payload via
+        // csStripeLinkOverrideField() so the PHP create-order handler receives the
+        // correct values even when the select dropdown hasn't reloaded yet.
+        // ─────────────────────────────────────────────────────────────────────────
+        var b = payload.billing_details || {};
+        var s = payload.shipping_address || {};
+
+        var bAddress = b.address || s.address || {};
+        var sAddress = s.address || b.address || {};
+        var bName = b.name || s.name || '';
+        var sName = s.name || b.name || '';
+        var bPhone = b.phone || s.phone || '';
+        var sPhone = s.phone || b.phone || '';
+        var bEmail = b.email || '';
+
+        /**
+         * Resolve a state value for the WooCommerce state <select> (UI only).
+         * Stripe Link may return full names ("California") or codes ("CA").
+         * We try option-text matching first, then fall back to the raw value.
+         * No trigger('change') is fired to avoid unwanted WC reactions.
+         *
+         * Note: this function is for visual UI sync only. The authoritative
+         * state value is injected directly into formData below.
+         */
+        function csStripeLinkSetStateSilent(selector, stateVal) {
+            if (!stateVal) { return; }
+            var $field = $(selector);
+            if (!$field.length) { return; }
+            if ($field.is('select')) {
+                var norm = stateVal.trim().toLowerCase();
+                var matched = false;
+                $field.find('option').each(function () {
+                    if ($(this).text().trim().toLowerCase() === norm) {
+                        $field.val($(this).val()); // silent — no trigger('change')
+                        matched = true;
+                        return false;
+                    }
+                });
+                if (!matched) {
+                    $field.val(stateVal); // try as-is (may already be a code)
+                }
+            } else {
+                $field.val(stateVal);
+            }
+        }
+
+        /**
+         * Override or append a field value in a serializeArray() result.
+         * Used to inject country/state into the POST body without touching the
+         * DOM in a way that would trigger WC checkout reloads.
+         */
+        function csStripeLinkOverrideField(data, name, value) {
+            for (var i = 0; i < data.length; i++) {
+                if (data[i].name === name) {
+                    data[i].value = value;
+                    return;
+                }
+            }
+            data.push({ name: name, value: value });
+        }
+
+        // Billing — text fields (safe, no WC side-effects)
+        if (bName) {
+            var bNames = bName.trim().split(/\s+/).filter(Boolean);
+            $('#billing_first_name').val(bNames[0] || '');
+            // Single-word name: use same token as last_name (WC requires both fields).
+            $('#billing_last_name').val(bNames.slice(1).join(' ') || bNames[0] || '');
+        }
+        if (bEmail) $('#billing_email').val(bEmail);
+        if (bPhone) $('#billing_phone').val(bPhone);
+        if (bAddress.line1) $('#billing_address_1').val(bAddress.line1);
+        if (bAddress.line2) $('#billing_address_2').val(bAddress.line2);
+        if (bAddress.city) $('#billing_city').val(bAddress.city);
+        if (bAddress.postal_code) $('#billing_postcode').val(bAddress.postal_code);
+        // Country/state: silent UI sync only — authoritative values go into formData
+        if (bAddress.country) $('#billing_country').val(bAddress.country);
+        if (bAddress.state) csStripeLinkSetStateSilent('#billing_state', bAddress.state);
+
+        // Shipping — text fields
+        if (sName) {
+            var sNames = sName.trim().split(/\s+/).filter(Boolean);
+            $('#shipping_first_name').val(sNames[0] || '');
+            // Single-word name: fallback to same token.
+            $('#shipping_last_name').val(sNames.slice(1).join(' ') || sNames[0] || '');
+        }
+        if (sPhone) $('#shipping_phone').val(sPhone);
+        if (sAddress.line1) $('#shipping_address_1').val(sAddress.line1);
+        if (sAddress.line2) $('#shipping_address_2').val(sAddress.line2);
+        if (sAddress.city) $('#shipping_city').val(sAddress.city);
+        if (sAddress.postal_code) $('#shipping_postcode').val(sAddress.postal_code);
+        // Country/state: silent UI sync only
+        if (sAddress.country) $('#shipping_country').val(sAddress.country);
+        if (sAddress.state) csStripeLinkSetStateSilent('#shipping_state', sAddress.state);
+
+        // Ship-to-different-address: inject into POST formData instead of
+        // triggering DOM change (which would fire update_checkout and reload
+        // the Stripe Link iframe, losing the pendingConfirmationToken).
+        if (payload.shipping_address) {
+            $('#ship-to-different-address-checkbox, #ship-to-different-address input').prop('checked', true);
         }
 
         window.endpoint_stripe_processing = true;
@@ -537,10 +597,69 @@ jQuery(function ($) {
         WOOTIFY_checkout_form.addClass('processing');
         $('#cs-stripe-loader').show();
 
+        // Serialize the form then inject Link address values directly into the
+        // POST payload.  This guarantees the PHP handler receives the correct
+        // billing, shipping, and country/state codes even when the WC select
+        // dropdown hasn't been reloaded yet (avoiding the update_checkout race).
         var formData = WOOTIFY_checkout_form.serializeArray();
+
+        // Inject all billing address fields from Stripe Link data
+        if (bName) {
+            var bNames = bName.trim().split(/\s+/);
+            csStripeLinkOverrideField(formData, 'billing_first_name', bNames[0] || '');
+            csStripeLinkOverrideField(formData, 'billing_last_name', bNames.slice(1).join(' ') || bNames[0] || '');
+        }
+        if (bEmail) csStripeLinkOverrideField(formData, 'billing_email', bEmail);
+        if (bPhone) csStripeLinkOverrideField(formData, 'billing_phone', bPhone);
+        if (bAddress.line1) csStripeLinkOverrideField(formData, 'billing_address_1', bAddress.line1);
+        if (bAddress.line2) csStripeLinkOverrideField(formData, 'billing_address_2', bAddress.line2);
+        if (bAddress.city)  csStripeLinkOverrideField(formData, 'billing_city', bAddress.city);
+        if (bAddress.postal_code) csStripeLinkOverrideField(formData, 'billing_postcode', bAddress.postal_code);
+        if (bAddress.country) {
+            csStripeLinkOverrideField(formData, 'billing_country', bAddress.country);
+            // Always inject state when country is provided — clears any stale DOM state
+            // from a previously selected country. WC validates state per-country locale,
+            // so an empty state is accepted for countries that don't require it (HK, SG, IE…).
+            csStripeLinkOverrideField(formData, 'billing_state', bAddress.state || '');
+        } else if (bAddress.state) {
+            csStripeLinkOverrideField(formData, 'billing_state', bAddress.state);
+        }
+
+        // Inject all shipping address fields from Stripe Link data
+        // (fallback to billing if shipping not provided by Stripe Link)
+        if (payload.shipping_address) {
+            csStripeLinkOverrideField(formData, 'ship_to_different_address', '1');
+            if (sName) {
+                var sNames2 = sName.trim().split(/\s+/);
+                csStripeLinkOverrideField(formData, 'shipping_first_name', sNames2[0] || '');
+                csStripeLinkOverrideField(formData, 'shipping_last_name', sNames2.slice(1).join(' ') || sNames2[0] || '');
+            }
+            if (sPhone) csStripeLinkOverrideField(formData, 'shipping_phone', sPhone);
+            csStripeLinkOverrideField(formData, 'shipping_address_1', sAddress.line1 || bAddress.line1 || '');
+            csStripeLinkOverrideField(formData, 'shipping_address_2', sAddress.line2 || bAddress.line2 || '');
+            csStripeLinkOverrideField(formData, 'shipping_city',      sAddress.city  || bAddress.city  || '');
+            csStripeLinkOverrideField(formData, 'shipping_postcode',  sAddress.postal_code || bAddress.postal_code || '');
+            var shippingCountry = sAddress.country || bAddress.country || '';
+            if (shippingCountry) {
+                csStripeLinkOverrideField(formData, 'shipping_country', shippingCountry);
+                // Always inject state alongside country to clear any stale DOM state
+                // value. Countries without state (HK, SG, IE…) pass WC locale validation
+                // with an empty state field.
+                var shippingState = sAddress.state || bAddress.state || '';
+                csStripeLinkOverrideField(formData, 'shipping_state', shippingState);
+            } else if (sAddress.state || bAddress.state) {
+                csStripeLinkOverrideField(formData, 'shipping_state', sAddress.state || bAddress.state || '');
+            }
+        }
+
         formData.push({ name: 'wootify-stripe-link-create-woo-order', value: '1' });
         formData.push({ name: 'payment_method', value: 'endpoint_stripe' });
         formData.push({ name: 'confirmation_token', value: payload.confirmation_token });
+        // Accept terms on behalf of user — they accepted by clicking Stripe Link.
+        csStripeLinkOverrideField(formData, 'terms', '1');
+        if (!formData.some(function (f) { return f.name === 'terms'; })) {
+            formData.push({ name: 'terms', value: '1' });
+        }
 
         $.ajax({
             url: window.location.href,
