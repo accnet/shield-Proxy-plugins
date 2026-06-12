@@ -5,6 +5,8 @@ jQuery(function ($) {
         var WOOTIFY_checkout_form = $('form.checkout');
     }
 
+    var STRIPE_LINK_REQUIRED_FIELDS_MESSAGE = 'Please fill in the required checkout fields before using Link.';
+
     function loadPaymentProcess() {
         setTimeout(function () {
             if (!window.WOOTIFY_stripe_checkout_error) {
@@ -346,18 +348,27 @@ jQuery(function ($) {
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkReady') {
             $('#wootify-stripe-link-express-container').show();
+            updateStripeLinkValidationOverlay();
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkUnavailable') {
             $('#wootify-stripe-link-express-container').hide();
+            $('#wootify-stripe-link-validation-overlay').hide();
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkResize') {
             var linkHeight = parseInt(event.data.value, 10);
             if (linkHeight > 0) {
                 $('#payment-stripe-link-area').attr('height', linkHeight + 8);
                 $('#payment-stripe-link-area').css('height', (linkHeight + 8) + 'px');
+                updateStripeLinkValidationOverlay();
             }
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkStart') {
+            if (!validateFormCheckoutForStripeLink(true)) {
+                postStripeLinkMessage({ name: 'wootify-stripeLinkCancel' });
+                checkout_error(STRIPE_LINK_REQUIRED_FIELDS_MESSAGE);
+                updateStripeLinkValidationOverlay();
+                return;
+            }
             blockOnSubmit(WOOTIFY_checkout_form);
             WOOTIFY_checkout_form.addClass('processing');
         }
@@ -424,19 +435,89 @@ jQuery(function ($) {
         }
     }
 
-    function validateFormCheckoutForStripeLink() {
-        var requiredFields = $('form.woocommerce-checkout .validate-required:visible :input');
-        requiredFields.each((i, input) => {
-            $(input).trigger('validate');
+    function getStripeLinkRequiredCheckoutFields() {
+        return WOOTIFY_checkout_form.find('.validate-required:visible :input').filter(function () {
+            var input = $(this);
+            return input.is(':visible') && !input.is(':disabled') && input.attr('type') !== 'hidden';
         });
-        var fields = ['#billing_first_name', '#billing_last_name', '#billing_email'];
-        for (var i = 0; i < fields.length; i++) {
-            if (!checkFieldValidated($(fields[i]))) {
-                return false;
-            }
-        }
-        return true;
     }
+
+    function validateFormCheckoutForStripeLink(showErrors) {
+        var valid = true;
+        var requiredFields = getStripeLinkRequiredCheckoutFields();
+        requiredFields.each(function (i, input) {
+            var field = $(input);
+            if (showErrors) {
+                field.trigger('validate').trigger('blur');
+            } else {
+                field.trigger('validate');
+            }
+            if (!checkFieldValidated(field)) {
+                valid = false;
+            }
+        });
+        return valid;
+    }
+
+    function updateStripeLinkValidationOverlay() {
+        var container = $('#wootify-stripe-link-express-container');
+        var iframe = $('#payment-stripe-link-area');
+        if (!container.length || !iframe.length || !container.is(':visible')) {
+            $('#wootify-stripe-link-validation-overlay').hide();
+            return;
+        }
+
+        if (container.css('position') === 'static') {
+            container.css('position', 'relative');
+        }
+
+        var overlay = $('#wootify-stripe-link-validation-overlay');
+        if (!overlay.length) {
+            overlay = $('<button type="button" id="wootify-stripe-link-validation-overlay" aria-label="Complete checkout fields before using Link"></button>');
+            overlay.css({
+                position: 'absolute',
+                zIndex: 20,
+                display: 'none',
+                background: 'transparent',
+                border: 0,
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer'
+            });
+            container.append(overlay);
+        }
+
+        var position = iframe.position();
+        overlay.css({
+            left: position.left,
+            top: position.top,
+            width: iframe.outerWidth(),
+            height: iframe.outerHeight()
+        });
+
+        if (validateFormCheckoutForStripeLink(false)) {
+            overlay.hide();
+        } else {
+            overlay.show();
+        }
+    }
+
+    $(document).on('click', '#wootify-stripe-link-validation-overlay', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!validateFormCheckoutForStripeLink(true)) {
+            checkout_error(STRIPE_LINK_REQUIRED_FIELDS_MESSAGE);
+        }
+        updateStripeLinkValidationOverlay();
+    });
+
+    WOOTIFY_checkout_form.on('input change blur', '.validate-required :input', function () {
+        window.setTimeout(updateStripeLinkValidationOverlay, 0);
+    });
+
+    $(window).on('resize', function () {
+        updateStripeLinkValidationOverlay();
+    });
 
     function handleStripeLinkConfirmationToken(payload) {
         if (window.WOOTIFY_stripe_processing) {
@@ -446,8 +527,8 @@ jQuery(function ($) {
             checkout_error('Payment confirmation token is missing. Please try again.');
             return;
         }
-        if (!validateFormCheckoutForStripeLink()) {
-            checkout_error('Please fill in the required checkout fields before using Link.');
+        if (!validateFormCheckoutForStripeLink(true)) {
+            checkout_error(STRIPE_LINK_REQUIRED_FIELDS_MESSAGE);
             return;
         }
 
@@ -544,7 +625,7 @@ jQuery(function ($) {
 
     function checkFieldValidated(target) {
         // If field doesn't exist, consider it valid (let WooCommerce handle validation)
-        if (!target.length) {
+        if (!target.length || target.is(':disabled') || !target.is(':visible')) {
             return true;
         }
         var formRow = target.closest('.form-row');
@@ -554,7 +635,13 @@ jQuery(function ($) {
         var isNotInvalid = !formRow.hasClass('woocommerce-invalid');
         var isNotEmpty = true;
         if (formRow.hasClass('validate-required')) {
-            isNotEmpty = (typeof target.val() == 'string') ? target.val().length > 0 : false;
+            if (target.is(':checkbox')) {
+                isNotEmpty = target.is(':checked');
+            } else if (target.is(':radio')) {
+                isNotEmpty = !!target.closest('.form-row').find('input[type="radio"]:checked').length;
+            } else {
+                isNotEmpty = (typeof target.val() == 'string') ? $.trim(target.val()).length > 0 : target.val() !== null && typeof target.val() !== 'undefined';
+            }
         }
         return isNotInvalid && isNotEmpty;
     }
