@@ -525,19 +525,28 @@ function handle_route() {
 
             // Report transaction to SaaS (mirrors stripe-endpoint-gateway behavior)
             if (class_exists('Shield_Stripe_Endpoint_Client')) {
-                Shield_Stripe_Endpoint_Client::report_transaction(
-                    $activatedProxy['shieldId'] ?? null,
-                    $order->get_total(),
-                    $order->get_id(),
-                    $order->get_currency(),
-                    [
-                        'providerTransactionId' => $body->charge->id ?? null,
-                        'paymentIntentId'       => $paymentIntent->id ?? null,
-                        'idempotencyKey'        => 'stripe:confirm:' . $order->get_id() . ':' . ($paymentIntent->id ?? ''),
-                        'traceId'               => $traceId,
-                        'paymentStatus'         => $isAuthorized ? 'processing' : 'succeeded',
-                    ]
-                );
+                // shield-manager proxies use legacy IDs ('id') and do NOT have 'shieldId'.
+                // Resolve shieldId from the Endpoint Client's active node instead.
+                $epShieldId = $activatedProxy['shieldId'] ?? null;
+                if (empty($epShieldId)) {
+                    $epActiveNode = Shield_Stripe_Endpoint_Client::get_active_node();
+                    $epShieldId = $epActiveNode['shieldId'] ?? ($epActiveNode['nodeId'] ?? null);
+                }
+                if (!empty($epShieldId)) {
+                    Shield_Stripe_Endpoint_Client::report_transaction(
+                        $epShieldId,
+                        $order->get_total(),
+                        $order->get_id(),
+                        $order->get_currency(),
+                        [
+                            'providerTransactionId' => $body->charge->id ?? null,
+                            'paymentIntentId'       => $paymentIntent->id ?? null,
+                            'idempotencyKey'        => 'stripe:confirm:' . $order->get_id() . ':' . ($paymentIntent->id ?? ''),
+                            'traceId'               => $traceId,
+                            'paymentStatus'         => $isAuthorized ? 'processing' : 'succeeded',
+                        ]
+                    );
+                }
             }
 
             if (isEnabledAmountRotationStripe()) {
