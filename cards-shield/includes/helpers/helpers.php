@@ -257,6 +257,11 @@ class Helpers {
     }
 
     update_option('shield_payment_transition_logs_queue', $queue, false);
+
+    // Immediate flush: attempt to send to SaaS right away so logs appear without waiting for cron.
+    // If the flush fails, the item remains in queue and cron will retry.
+    self::flushPaymentTransitionLogs(10);
+
     return true;
   }
 

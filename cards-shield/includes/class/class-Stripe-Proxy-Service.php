@@ -628,10 +628,10 @@ class Shield_Stripe_Proxy_Service {
         }
 
         Helpers::queuePaymentTransitionLog(array_merge([
-            'gateway' => 'stripe',
-            'mode' => $this->detectMode(),
-            'managerId' => $this->managerId,
-            'traceId' => $this->traceId,
+            'gateway'           => 'stripe',
+            'mode'              => $this->detectMode(),
+            'managerId'         => $this->managerId,
+            'traceId'           => $this->traceId,
             'transitionApplied' => true,
         ], $data));
     }
