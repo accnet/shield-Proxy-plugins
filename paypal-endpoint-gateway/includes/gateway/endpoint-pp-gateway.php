@@ -360,7 +360,8 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
 
     /**
      * Check if gateway is available for use.
-     * Hides payment method at checkout when no active proxy node is available.
+     * Hides payment method at checkout when no active proxy node is available,
+     * or when the connection has been paused by SaaS admin.
      */
     public function is_available() {
         $parent = parent::is_available();
@@ -368,6 +369,10 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
             return false;
         }
         if (class_exists('Shield_PayPal_Endpoint_Client')) {
+            // Paused by SaaS: hide from checkout (does not affect in-flight payments)
+            if (get_option(Shield_PayPal_Endpoint_Client::opt('PAUSED'), 'no') === 'yes') {
+                return false;
+            }
             return Shield_PayPal_Endpoint_Client::has_active_nodes();
         }
         return false;

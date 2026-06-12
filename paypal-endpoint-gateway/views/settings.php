@@ -20,6 +20,7 @@ $connected_at   = get_option('EP_PP_CONNECTED_AT', 0);
 $endpoint_id    = get_option('EP_PP_ENDPOINT_ID', '');
 $last_sync_at   = get_option('EP_PP_LAST_SYNC_AT', 0);
 $nodes          = get_option('EP_PP_NODES', []);
+$is_paused      = get_option('EP_PP_PAUSED', 'no') === 'yes';
 if (!is_array($nodes)) {
     $nodes = [];
 }
@@ -37,7 +38,12 @@ if (!is_array($nodes)) {
             <div class="postbox">
                 <div class="postbox-header">
                     <h2 class="hndle">
-                        <span><?php echo $is_connected ? '🟢 Connected to SaaS' : '🔴 Connection Status'; ?></span>
+                        <span>
+                            <?php echo $is_connected ? '🟢 Connected to SaaS' : '🔴 Connection Status'; ?>
+                            <?php if ($is_connected && $is_paused): ?>
+                                &nbsp;<span style="display:inline-block;background:#fcf0b1;color:#856404;border:1px solid #f5c842;border-radius:3px;padding:1px 8px;font-size:11px;font-weight:600;letter-spacing:.03em;vertical-align:middle;">⏸ PAUSED by SaaS</span>
+                            <?php endif; ?>
+                        </span>
                     </h2>
                 </div>
                 <div class="inside">
@@ -71,6 +77,17 @@ if (!is_array($nodes)) {
                                             <span class="badge-wp badge-info">Enabled (<?php echo esc_html($rotation_method); ?>)</span>
                                         <?php else: ?>
                                             <span class="badge-wp badge-secondary">Disabled</span>
+                                        <?php endif; ?>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <th scope="row">Connection Status</th>
+                                    <td>
+                                        <?php if ($is_paused): ?>
+                                            <span style="display:inline-flex;align-items:center;gap:5px;background:#fcf0b1;color:#856404;border:1px solid #f5c842;border-radius:3px;padding:2px 10px;font-size:12px;font-weight:600;">⏸ Paused by SaaS</span>
+                                            <p class="description" style="margin-top:4px;">New checkout payments are blocked. In-flight transactions already in progress will complete normally. Resume from the SaaS dashboard.</p>
+                                        <?php else: ?>
+                                            <span style="display:inline-flex;align-items:center;gap:5px;background:#edfaee;color:#1a7f37;border:1px solid #82d9a0;border-radius:3px;padding:2px 10px;font-size:12px;font-weight:600;">▶ Active</span>
                                         <?php endif; ?>
                                     </td>
                                 </tr>

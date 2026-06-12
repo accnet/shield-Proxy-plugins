@@ -179,6 +179,9 @@ jQuery(function ($) {
                 });
             }
             scheduleStripeFrameWatch();
+            setTimeout(function () {
+                scheduleStripeLinkAvailabilityCheck(0);
+            }, 500);
         });
     }
     /*
@@ -189,6 +192,9 @@ jQuery(function ($) {
     } else {
         window.attachEvent("onmessage", listener);
     }
+    setTimeout(function () {
+        scheduleStripeLinkAvailabilityCheck(0);
+    }, 500);
 
     function blockOnSubmit(form) {
         var isBlocked = form.data('blockUI.isBlocked');
@@ -204,7 +210,64 @@ jQuery(function ($) {
         }
     }
 
+    function getStripeLinkExpectedOrigin() {
+        var proxyUrl = $('#endpoint_stripe_link_current_proxy_url').data('value')
+            || $('#WOOTIFY_stripe_link_current_proxy_url').data('value');
+        if (!proxyUrl || !window.URL) {
+            return '';
+        }
+        try {
+            return new URL(proxyUrl, window.location.href).origin;
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function isStripeLinkMessage(data) {
+        return typeof data === 'object'
+            && data
+            && typeof data.name === 'string'
+            && data.name.indexOf('wootify-stripeLink') === 0;
+    }
+
+    function isTrustedStripeLinkMessage(event) {
+        var iframe = document.getElementById('payment-stripe-link-area');
+        var expectedOrigin = getStripeLinkExpectedOrigin();
+        if (!iframe || !iframe.contentWindow || !expectedOrigin) {
+            return false;
+        }
+        return event.source === iframe.contentWindow && event.origin === expectedOrigin;
+    }
+
+    function postStripeLinkMessage(payload) {
+        var iframe = document.getElementById('payment-stripe-link-area');
+        var expectedOrigin = getStripeLinkExpectedOrigin();
+        if (!iframe || !iframe.contentWindow || !expectedOrigin) {
+            checkout_error('Express checkout is not ready. Please try another payment method.');
+            return false;
+        }
+        iframe.contentWindow.postMessage(payload, expectedOrigin);
+        return true;
+    }
+
+    function scheduleStripeLinkAvailabilityCheck(attempt) {
+        attempt = attempt || 0;
+        var iframe = document.getElementById('payment-stripe-link-area');
+        var expectedOrigin = getStripeLinkExpectedOrigin();
+        if (iframe && iframe.contentWindow && expectedOrigin) {
+            iframe.contentWindow.postMessage({ name: 'wootify-stripeLinkCheckAvailability' }, expectedOrigin);
+        }
+        if (attempt < 6 && (!iframe || !iframe.contentWindow || !expectedOrigin || !$('#wootify-stripe-link-express-container').is(':visible'))) {
+            setTimeout(function () {
+                scheduleStripeLinkAvailabilityCheck(attempt + 1);
+            }, 500);
+        }
+    }
+
     function listener(event) {
+        if (isStripeLinkMessage(event.data) && !isTrustedStripeLinkMessage(event)) {
+            return;
+        }
         if (event.data === "wootify-startSubmitPaymentStripe") {
             // Clear timeout since iframe responded
             if (window.endpoint_stripe_timeout) {
@@ -421,13 +484,13 @@ jQuery(function ($) {
 
                 window.endpoint_stripe_order_id = result.data.order_id;
                 window.cs_stripe_link_attempt_token = result.data.attempt_token;
-                $('#payment-stripe-link-area')[0].contentWindow.postMessage({
+                postStripeLinkMessage({
                     name: 'wootify-stripeLinkConfirmIntent',
                     value: {
                         client_secret: result.data.client_secret,
                         attempt_token: result.data.attempt_token,
                     }
-                }, '*');
+                });
             },
             error: function () {
                 window.endpoint_stripe_processing = false;

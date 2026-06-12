@@ -125,14 +125,23 @@ class Shield_PayPal_Endpoint_Receiver
         if (isset($data['rotationMethod'])) {
             update_option(self::opt('ROTATION_METHOD'), sanitize_text_field($data['rotationMethod']), true);
         }
+        // Save paused state pushed from SaaS
+        $paused_bool = false;
+        if (array_key_exists('paused', $data)) {
+            $paused_bool = !empty($data['paused']);
+            $paused_option = $paused_bool ? 'yes' : 'no';
+            update_option(Shield_PayPal_Endpoint_Client::opt('PAUSED'), $paused_option, true);
+        }
 
         update_option(self::opt('LAST_SYNC_AT'), time(), true);
 
-        self::log('Config update received: ' . count($data['nodes'] ?? []) . ' nodes');
+        self::log('Config update received: ' . count($data['nodes'] ?? []) . ' nodes, paused=' . ($paused_bool ? 'yes' : 'no'));
 
         return new WP_REST_Response([
-            'success' => true,
-            'message' => 'Config updated',
+            'success'  => true,
+            'paused'   => $paused_bool,
+            'provider' => 'paypal',
+            'message'  => $paused_bool ? 'PayPal endpoint gateway paused' : 'PayPal endpoint gateway resumed/active',
         ], 200);
     }
 

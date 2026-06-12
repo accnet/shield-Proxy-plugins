@@ -22,7 +22,7 @@ class Shield_PayPal_Endpoint_Client
         return 'EP_PP_';
     }
 
-    private static function opt($key)
+    public static function opt($key)
     {
         return self::prefix() . $key;
     }
@@ -145,7 +145,7 @@ class Shield_PayPal_Endpoint_Client
         $keys = [
             'CONNECTED', 'HMAC_SECRET',
             'ENDPOINT_ID', 'ENDPOINT_NAME', 'TYPE', 'ENABLE_ROTATION',
-            'ROTATION_METHOD', 'CONNECTED_AT', 'NODES',
+            'ROTATION_METHOD', 'CONNECTED_AT', 'NODES', 'PAUSED',
         ];
         foreach ($keys as $key) {
             delete_option(self::opt($key));
@@ -212,6 +212,12 @@ class Shield_PayPal_Endpoint_Client
         }
         if (isset($data['rotationMethod'])) {
             update_option(self::opt('ROTATION_METHOD'), $data['rotationMethod'], true);
+        }
+        if (isset($data['paused'])) {
+            $paused = !empty($data['paused']) ? 'yes' : 'no';
+            update_option(self::opt('PAUSED'), $paused, true);
+        } else {
+            self::log('pull_config: paused field missing in SaaS response — keeping current paused state');
         }
 
         // Auto-rotate: if SaaS sent a new secret, update it locally

@@ -129,7 +129,7 @@ if (!function_exists('ep_stripe_signed_request_args')) {
     }
 }
 
-defined('OPT_WOOTIFY_STRIPE_VERSION') || define('OPT_WOOTIFY_STRIPE_VERSION', '2.2.14');
+defined('OPT_WOOTIFY_STRIPE_VERSION') || define('OPT_WOOTIFY_STRIPE_VERSION', '2.2.16');
 defined('EP_ST_NODES') || define('EP_ST_NODES', 'EP_ST_NODES');
 defined('EP_ST_ACTIVE_NODE') || define('EP_ST_ACTIVE_NODE', 'EP_ST_ACTIVE_NODE');
 defined('EP_ST_ROTATION_METHOD') || define('EP_ST_ROTATION_METHOD', 'EP_ST_ROTATION_METHOD');

@@ -3,7 +3,8 @@
 }
 
 .cs-stripe-link-express {
-    margin: 0 0 18px;
+    margin: 0 0 10px;
+    display: block;
 }
 
 #stripe-link-express-text {
@@ -15,8 +16,7 @@
 }
 
 #stripe-link-express-or-text {
-    margin: 12px 0 4px;
-    color: #6b7280;
+    margin: 5px 0 5px;
     font-size: 13px;
 }
 
@@ -183,6 +183,6 @@
     -ms-overflow-style: none !important;
     display: block;
     width: calc(100% + 24px) !important;
-    max-width: none !important;
-    clip-path: inset(0 24px 24px 0) !important;
+    max-width: calc(100% + 15px) !important;
+    clip-path: inset(0 15px 15px 0) !important;
 }

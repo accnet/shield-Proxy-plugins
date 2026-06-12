@@ -2,13 +2,37 @@ var stripe = null;
 var elements = null;
 var expressCheckoutElement = null;
 var pendingConfirmationToken = null;
+var linkAvailabilityState = "unknown";
+var linkUnavailableReason = "";
+
+function csStripeLinkNormalizeOrigin(origin) {
+  if (!origin || !window.URL) {
+    return origin ? origin.replace(/\/$/, "") : "";
+  }
+  try {
+    return new URL(origin, window.location.href).origin;
+  } catch (e) {
+    return origin.replace(/\/$/, "");
+  }
+}
 
 function csStripeLinkTargetOrigin() {
-  return window.parentOrigin ? window.parentOrigin.replace(/\/$/, "") : "*";
+  return window.parentOrigin ? csStripeLinkNormalizeOrigin(window.parentOrigin) : "*";
 }
 
 function csStripeLinkPost(message) {
   parent.postMessage(message, csStripeLinkTargetOrigin());
+}
+
+function csStripeLinkPostAvailability() {
+  if (linkAvailabilityState === "ready") {
+    csStripeLinkPost({ name: "wootify-stripeLinkReady" });
+    csStripeLinkResize();
+    return;
+  }
+  if (linkAvailabilityState === "unavailable") {
+    csStripeLinkPost({ name: "wootify-stripeLinkUnavailable", value: linkUnavailableReason || "link_unavailable" });
+  }
 }
 
 Object.defineProperty(document, "referrer", {
@@ -20,6 +44,8 @@ Object.defineProperty(document, "referrer", {
 try {
   stripe = Stripe(window.stripePublicKey);
 } catch (e) {
+  linkAvailabilityState = "unavailable";
+  linkUnavailableReason = "stripe_init_failed";
   csStripeLinkPost({ name: "wootify-stripeLinkUnavailable", value: "stripe_init_failed" });
 }
 
@@ -50,10 +76,13 @@ function initializeStripeLink() {
     expressCheckoutElement.on("ready", function (event) {
       var methods = event.availablePaymentMethods || {};
       if (methods.link) {
-        csStripeLinkPost({ name: "wootify-stripeLinkReady" });
+        linkAvailabilityState = "ready";
+        linkUnavailableReason = "";
       } else {
-        csStripeLinkPost({ name: "wootify-stripeLinkUnavailable", value: "link_unavailable" });
+        linkAvailabilityState = "unavailable";
+        linkUnavailableReason = "link_unavailable";
       }
+      csStripeLinkPostAvailability();
       csStripeLinkResize();
     });
 
@@ -66,14 +95,18 @@ function initializeStripeLink() {
     });
 
     expressCheckoutElement.on("loaderror", function (event) {
+      linkAvailabilityState = "unavailable";
+      linkUnavailableReason = event && event.error ? event.error.message : "loaderror";
       csStripeLinkPost({
         name: "wootify-stripeLinkUnavailable",
-        value: event && event.error ? event.error.message : "loaderror",
+        value: linkUnavailableReason,
       });
     });
 
     expressCheckoutElement.mount("#stripe-link-express-element");
   } catch (e) {
+    linkAvailabilityState = "unavailable";
+    linkUnavailableReason = e.message || "init_failed";
     csStripeLinkPost({ name: "wootify-stripeLinkUnavailable", value: e.message || "init_failed" });
   }
 }
@@ -146,13 +179,22 @@ if (window.addEventListener) {
 
 function csStripeLinkListener(event) {
   if (window.parentOrigin) {
-    var expected = window.parentOrigin.replace(/\/$/, "");
-    var actual = event.origin.replace(/\/$/, "");
+    var expected = csStripeLinkNormalizeOrigin(window.parentOrigin);
+    var actual = csStripeLinkNormalizeOrigin(event.origin);
     if (actual !== expected) {
       return;
     }
   }
-  if (typeof event.data !== "object" || event.data.name !== "wootify-stripeLinkConfirmIntent") {
+  if (typeof event.data !== "object") {
+    return;
+  }
+
+  if (event.data.name === "wootify-stripeLinkCheckAvailability") {
+    csStripeLinkPostAvailability();
+    return;
+  }
+
+  if (event.data.name !== "wootify-stripeLinkConfirmIntent") {
     return;
   }
 
