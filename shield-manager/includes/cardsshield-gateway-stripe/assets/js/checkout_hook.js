@@ -137,6 +137,12 @@ jQuery(function ($) {
                 checkout_error('Payment form is still loading. Please wait a moment and try again.');
                 return;
             }
+
+            // Check card fields are filled before blocking the form
+            if (!window.paymentFormCompletedStripe) {
+                checkout_error('Please complete your card details (card number, expiration date, and security code).');
+                return;
+            }
             
             // Always send message to iframe first if basic validation passes
             // Let WooCommerce handle full form validation after we get payment method id
@@ -322,6 +328,17 @@ jQuery(function ($) {
 
         if (event.data === 'wootify-paymentFormFailStripe') {
             window.paymentFormCompletedStripe = false;
+        }
+
+        // Card fields incomplete — reset processing and show user-facing error
+        if ((typeof event.data === 'object') && event.data.name === 'wootify-cardFieldsIncomplete') {
+            if (window.WOOTIFY_stripe_timeout) {
+                clearTimeout(window.WOOTIFY_stripe_timeout);
+            }
+            window.WOOTIFY_stripe_processing = false;
+            $('#place_order').prop('disabled', false);
+            WOOTIFY_checkout_form.removeClass('processing').unblock();
+            checkout_error(event.data.value || 'Please complete your card details (card number, expiration date, and security code).');
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-errorSubmitPaymentStripe') {
             // Clear timeout and reset processing flag

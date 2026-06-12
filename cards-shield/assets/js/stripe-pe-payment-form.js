@@ -109,17 +109,21 @@ function handleSubmit(formData) {
     console.log('Stripe elements submit result:', e);
     if (e.error) {
       console.error('Stripe submit error:', e.error);
-      if (
-        [
-          "incomplete_number",
-          "invalid_number",
-          "incomplete_expiry",
-          "invalid_expiry",
-          "incomplete_cvc",
-          "invalid_cvc",
-        ].includes(e.error.code)
-      ) {
-        parent.postMessage("wootify-endSubmitPaymentStripe", "*");
+      var cardIncompleteErrors = [
+        'incomplete_number',
+        'invalid_number',
+        'incomplete_expiry',
+        'invalid_expiry_year_past',
+        'invalid_expiry_month_past',
+        'incomplete_cvc',
+        'invalid_cvc',
+      ];
+      if (cardIncompleteErrors.indexOf(e.error.code) !== -1) {
+        // Card fields incomplete — send error so site2 shows a message
+        parent.postMessage({
+          name: 'wootify-cardFieldsIncomplete',
+          value: e.error.message || 'Please complete your card details.',
+        }, '*');
       } else {
         parent.postMessage(
           {
@@ -152,17 +156,20 @@ function handleSubmit(formData) {
           );
         } else if (result.error) {
           console.error('createPaymentMethod error:', result.error);
-          if (
-            [
-              "incomplete_number",
-              "invalid_number",
-              "incomplete_expiry",
-              "invalid_expiry",
-              "incomplete_cvc",
-              "invalid_cvc",
-            ].includes(result.error.code)
-          ) {
-            parent.postMessage("wootify-endSubmitPaymentStripe", "*");
+          var cardIncompleteErrors2 = [
+            'incomplete_number',
+            'invalid_number',
+            'incomplete_expiry',
+            'invalid_expiry_year_past',
+            'invalid_expiry_month_past',
+            'incomplete_cvc',
+            'invalid_cvc',
+          ];
+          if (cardIncompleteErrors2.indexOf(result.error.code) !== -1) {
+            parent.postMessage({
+              name: 'wootify-cardFieldsIncomplete',
+              value: result.error.message || 'Please complete your card details.',
+            }, '*');
           } else {
             parent.postMessage(
               {

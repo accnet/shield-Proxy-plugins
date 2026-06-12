@@ -12,7 +12,7 @@
  * Plugin Name: Shield Proxy Manager
  * Plugin URI:  https://wootify.dev
  * Description: Shield Proxy Manager
- * Version:     2.1.8
+ * Version:     2.1.9
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: CS
