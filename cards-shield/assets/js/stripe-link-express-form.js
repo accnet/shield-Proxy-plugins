@@ -122,9 +122,6 @@ function initializeStripeLink() {
         klarna: "never",
       },
       shippingAddressRequired: true,
-      billingAddressRequired: true,
-      emailRequired: true,
-      phoneNumberRequired: true,
     });
 
     // Must handle shippingaddresschange and resolve with the shipping rates.

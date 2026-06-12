@@ -587,11 +587,38 @@ function ep_stripe_handle_link_express_create_woo_order() {
         $postedData = $checkout->get_posted_data();
         $postedData['payment_method'] = 'endpoint_stripe';
 
-        // Log POST raw and posted data
-        ep_stripe_debug_log([
-            '$_POST' => $_POST,
-            '$postedData' => $postedData
-        ], 'Stripe Link: Create Woo Order Debug Start');
+        // Force billing address from $_POST to prevent WooCommerce get_posted_data from skipping/sanitizing them
+        $billing_fields = [
+            'billing_first_name', 'billing_last_name', 'billing_company',
+            'billing_address_1', 'billing_address_2', 'billing_city',
+            'billing_state', 'billing_postcode', 'billing_country',
+            'billing_phone', 'billing_email'
+        ];
+        foreach ($billing_fields as $field) {
+            if (isset($_POST[$field])) {
+                $value = wp_unslash($_POST[$field]);
+                if ($field === 'billing_email') {
+                    $postedData[$field] = sanitize_email($value);
+                } else {
+                    $postedData[$field] = sanitize_text_field($value);
+                }
+            }
+        }
+
+        // Force shipping address from $_POST if ship_to_different_address is true
+        if (!empty($_POST['ship_to_different_address'])) {
+            $postedData['ship_to_different_address'] = true;
+            $shipping_fields = [
+                'shipping_first_name', 'shipping_last_name', 'shipping_company',
+                'shipping_address_1', 'shipping_address_2', 'shipping_city',
+                'shipping_state', 'shipping_postcode', 'shipping_country', 'shipping_phone'
+            ];
+            foreach ($shipping_fields as $field) {
+                if (isset($_POST[$field])) {
+                    $postedData[$field] = sanitize_text_field(wp_unslash($_POST[$field]));
+                }
+            }
+        }
 
         $orderId = $checkout->create_order($postedData);
         if (is_wp_error($orderId)) {
@@ -601,26 +628,6 @@ function ep_stripe_handle_link_express_create_woo_order() {
         if (!$order instanceof WC_Order) {
             wp_send_json_error(['message' => 'Unable to create Woo order.'], 500);
         }
-
-        // Log created order address fields
-        ep_stripe_debug_log([
-            'order_id' => $order->get_id(),
-            'billing_first_name' => $order->get_billing_first_name(),
-            'billing_last_name' => $order->get_billing_last_name(),
-            'billing_address_1' => $order->get_billing_address_1(),
-            'billing_address_2' => $order->get_billing_address_2(),
-            'billing_city' => $order->get_billing_city(),
-            'billing_state' => $order->get_billing_state(),
-            'billing_postcode' => $order->get_billing_postcode(),
-            'billing_country' => $order->get_billing_country(),
-            'shipping_first_name' => $order->get_shipping_first_name(),
-            'shipping_last_name' => $order->get_shipping_last_name(),
-            'shipping_address_1' => $order->get_shipping_address_1(),
-            'shipping_city' => $order->get_shipping_city(),
-            'shipping_state' => $order->get_shipping_state(),
-            'shipping_postcode' => $order->get_shipping_postcode(),
-            'shipping_country' => $order->get_shipping_country(),
-        ], 'Stripe Link: Created Order Address Fields');
 
         $order->set_payment_method($gateway);
         $order->update_meta_data(METAKEY_EP_STRIPE_PROXY_URL, $activatedProxy['url']);
