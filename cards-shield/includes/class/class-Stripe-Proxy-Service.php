@@ -58,6 +58,8 @@ class Shield_Stripe_Proxy_Service {
             return $this->errorResponse(409, 'duplicate_request', 'Duplicate make-payment request', 'duplicate_request');
         }
 
+        $routeId = $this->resolveOrCreateCallbackRoute($payload);
+
         try {
             $paymentIntent = null;
             $paymentIntentId = isset($payload['payment_intent']) ? sanitize_text_field((string) $payload['payment_intent']) : '';
@@ -86,6 +88,10 @@ class Shield_Stripe_Proxy_Service {
                 }
             }
 
+            if (!empty($paymentIntent)) {
+                $this->linkPaymentIntentToRoute($routeId, $paymentIntent->id);
+            }
+
             if (empty($paymentIntent)) {
                 $paymentIntent = $this->stripe->paymentIntents->create([
                     'amount' => $amountMinor,
@@ -103,14 +109,15 @@ class Shield_Stripe_Proxy_Service {
                         'customer_name' => (string) ($payload['name'] ?? ''),
                         'order_id' => (string) ($payload['order_invoice'] ?? ''),
                         'woo_order_id' => (string) ($payload['order_id'] ?? ''),
-                        'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                        'processor_id' => (string) ($payload['shield_id'] ?? ''),
                         'manager_id' => $this->managerId,
-                        'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                        'route_id' => $routeId,
                         'merchant_site' => home_url(),
                     ],
                 ], [
                     'idempotency_key' => substr(hash('sha256', $idempotencyKey), 0, 255),
                 ]);
+                $this->linkPaymentIntentToRoute($routeId, $paymentIntent->id);
             }
 
             if ($paymentIntent->status === 'succeeded') {
@@ -200,6 +207,8 @@ class Shield_Stripe_Proxy_Service {
             return $this->errorResponse(409, 'duplicate_request', 'Duplicate Link express request', 'duplicate_request');
         }
 
+        $routeId = $this->resolveOrCreateCallbackRoute($payload);
+
         try {
             $createParams = [
                 'amount' => $amountMinor,
@@ -213,9 +222,9 @@ class Shield_Stripe_Proxy_Service {
                     'customer_name' => (string) ($payload['name'] ?? ''),
                     'order_id' => (string) ($payload['order_invoice'] ?? ''),
                     'woo_order_id' => (string) ($payload['order_id'] ?? ''),
-                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
+                    'processor_id' => (string) ($payload['shield_id'] ?? ''),
                     'manager_id' => $this->managerId,
-                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'route_id' => $routeId,
                     'merchant_site' => home_url(),
                     'funding_source' => 'link_express',
                 ],
@@ -224,6 +233,7 @@ class Shield_Stripe_Proxy_Service {
             $paymentIntent = $this->stripe->paymentIntents->create($createParams, [
                 'idempotency_key' => substr(hash('sha256', $idempotencyKey), 0, 255),
             ]);
+            $this->linkPaymentIntentToRoute($routeId, $paymentIntent->id);
 
             Helpers::trackStripeWebhookPayment($paymentIntent->id, [
                 'mode' => $this->detectMode(),
@@ -649,5 +659,61 @@ class Shield_Stripe_Proxy_Service {
     private function readHeader($name) {
         $key = 'HTTP_' . strtoupper(str_replace('-', '_', $name));
         return isset($_SERVER[$key]) ? sanitize_text_field((string) $_SERVER[$key]) : '';
+    }
+
+    /**
+     * Tao hoac reuse route_id on dinh cho mot order.
+     * Key stable: sha256(order_id|shield_id|manager_id) dam bao retry cung order dung lai route cu.
+     */
+    private function resolveOrCreateCallbackRoute(array $payload): string {
+        $stableKey = hash('sha256', implode('|', [
+            (string) ($payload['order_id'] ?? ''),
+            (string) ($payload['shield_id'] ?? ''),
+            (string) ($this->managerId ?? ''),
+        ]));
+        $lookupKey = 'shield_route_key_' . $stableKey;
+
+        // Neu route da ton tai cho order nay, reuse
+        $existingRouteId = get_transient($lookupKey);
+        if ($existingRouteId && is_string($existingRouteId)) {
+            $routeData = get_transient('shield_route_' . $existingRouteId);
+            if (is_array($routeData)) {
+                // Refresh TTL
+                set_transient('shield_route_' . $existingRouteId, $routeData, 30 * DAY_IN_SECONDS);
+                set_transient($lookupKey, $existingRouteId, 30 * DAY_IN_SECONDS);
+                return $existingRouteId;
+            }
+        }
+
+        // Tao moi
+        $routeId = function_exists('wp_generate_uuid4') ? wp_generate_uuid4() : bin2hex(random_bytes(16));
+        $routeData = [
+            'route_id'             => $routeId,
+            'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+            'manager_id'           => $this->managerId,
+            'shield_id'            => (string) ($payload['shield_id'] ?? ''),
+            'woo_order_id'         => (string) ($payload['order_id'] ?? ''),
+            'payment_intent_id'    => '',
+            'created_at'           => current_time('mysql'),
+        ];
+
+        set_transient('shield_route_' . $routeId, $routeData, 30 * DAY_IN_SECONDS);
+        set_transient($lookupKey, $routeId, 30 * DAY_IN_SECONDS);
+        return $routeId;
+    }
+
+    /**
+     * Ghi payment_intent_id vao route record sau khi PI duoc tao thanh cong.
+     */
+    private function linkPaymentIntentToRoute(string $routeId, string $paymentIntentId): void {
+        if ($routeId === '' || $paymentIntentId === '') {
+            return;
+        }
+        $key = 'shield_route_' . $routeId;
+        $data = get_transient($key);
+        if (is_array($data)) {
+            $data['payment_intent_id'] = $paymentIntentId;
+            set_transient($key, $data, 30 * DAY_IN_SECONDS);
+        }
     }
 }

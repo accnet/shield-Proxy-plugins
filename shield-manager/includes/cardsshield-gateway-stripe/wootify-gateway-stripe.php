@@ -493,7 +493,8 @@ function handle_route() {
             wc_add_notice('We cannot process your payment right now, please try another payment method.[invalid-response]', 'error');
             return cs_stripe_redirect_and_exit(wc_get_checkout_url());
         }
-        $paymentStripeIntent = get_option('woocommerce_stripe_settings')['intent'];
+        // Read intent from own gateway settings (with legacy woocommerce_stripe_settings fallback)
+        $paymentStripeIntent = cs_stripe_get_setting_value('intent', 'capture');
 
         if ($body->status === 'success') {
             $paymentIntent = $body->payment_intent;
@@ -521,6 +522,23 @@ function handle_route() {
                 $order->add_order_note(sprintf(__('Stripe Checkout charge complete (Payment Intent ID: %s)', 'wootify'), $paymentIntent->id));
             }
             $order->reduce_order_stock();
+
+            // Report transaction to SaaS (mirrors stripe-endpoint-gateway behavior)
+            if (class_exists('Shield_Stripe_Endpoint_Client')) {
+                Shield_Stripe_Endpoint_Client::report_transaction(
+                    $activatedProxy['shieldId'] ?? null,
+                    $order->get_total(),
+                    $order->get_id(),
+                    $order->get_currency(),
+                    [
+                        'providerTransactionId' => $body->charge->id ?? null,
+                        'paymentIntentId'       => $paymentIntent->id ?? null,
+                        'idempotencyKey'        => 'stripe:confirm:' . $order->get_id() . ':' . ($paymentIntent->id ?? ''),
+                        'traceId'               => $traceId,
+                        'paymentStatus'         => $isAuthorized ? 'processing' : 'succeeded',
+                    ]
+                );
+            }
 
             if (isEnabledAmountRotationStripe()) {
                 performProxyAmountRotationStripe($order->get_total());
@@ -1341,6 +1359,12 @@ function WOOTIFY_add_gateway_stripe_init() {
                 if (!function_exists('WC') || !WC()->cart || WC()->cart->is_empty()) {
                     return '';
                 }
+                // Defer to stripe-endpoint-gateway when it is active and usable.
+                // Both plugins use the same iframe ID (#payment-stripe-link-area);
+                // rendering two iframes with the same ID breaks JS selectors.
+                if (function_exists('cs_stripe_endpoint_gateway_is_usable') && cs_stripe_endpoint_gateway_is_usable()) {
+                    return '';
+                }
 
                 findAndSetNextProxy();
                 $nextProxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
@@ -1358,7 +1382,8 @@ function WOOTIFY_add_gateway_stripe_init() {
                     'wootify-stripe-link-express-form' => 1,
                     'amount' => $amount,
                     'currency' => get_woocommerce_currency(),
-                    'parent_origin' => home_url(),
+                    // parent_origin removed: iframe learns site2 origin via postMessage
+                    // handshake (event.origin is browser-enforced, not spoofable)
                     'shipping_amount' => $shippingAmount,
                     'shipping_label' => __('Shipping', 'woocommerce'),
                 ];
@@ -1532,7 +1557,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 ?>
                     <input style="display:none;" name="wootify-stripe-payment-method-id" />
                     <iframe id="payment-stripe-area" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?' . http_build_query($params) ?>" height="200" frameBorder="0" style="width: 100%"></iframe>
-                    <span id="endpoint-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url())) ?>"></span>
+                    <span id="endpoint-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1') ?>"></span>
     <?php
                 }
                 action_stripe_wp_footer();
@@ -1681,7 +1706,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                     'payment_intent' => $paymentIntentIdRequest,
                     'payment_method_id' => $_POST['wootify-stripe-payment-method-id'],
                     'order_id' => $order->get_id(),
-                    'shield_id' => $activatedProxy['id'],
+                    'processor_id' => $activatedProxy['id'],
                     'manager_callback_url' => csStripeDirectWebhookCallbackUrl(),
                     'order_invoice' => $this->invoice_prefix . $order->get_order_number(),
                     'order_items' => $items,

@@ -358,7 +358,7 @@ function ep_stripe_handle_route() {
         }
 
         if (!$activeProxyId = $order->get_meta(METAKEY_EP_STRIPE_PROXY_ID)) {
-            $activeProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+            $activeProxyId = WC()->session->get('ep-stripe-proxy-active-id');
         }
         $activatedProxy = ep_stripe_find_activated_proxy_data_by_id(get_option(EP_ST_NODES, []), $activeProxyId);
 
@@ -576,7 +576,7 @@ function ep_stripe_handle_link_express_create_woo_order() {
     }
     $gateway = $paymentGateways['endpoint_stripe'];
 
-    $activeProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+    $activeProxyId = WC()->session->get('ep-stripe-proxy-active-id');
     $activatedProxy = ep_stripe_find_activated_proxy_data_by_id(get_option(EP_ST_NODES, []), $activeProxyId);
     if (!$activatedProxy) {
         wp_send_json_error(['message' => 'Stripe shield is not available.'], 400);
@@ -756,8 +756,8 @@ function ep_stripe_add_gateway_stripe_init() {
 
                 // Store active node in session for checkout use
                 if (function_exists('WC') && WC()->session) {
-                    WC()->session->set('wootify-stripe-proxy-active-url', $activeNode['url']);
-                    WC()->session->set('wootify-stripe-proxy-active-id', $activeNode['nodeId'] ?? null);
+                    WC()->session->set('ep-stripe-proxy-active-url', $activeNode['url']);
+                    WC()->session->set('ep-stripe-proxy-active-id', $activeNode['nodeId'] ?? null);
                 }
 
                 return $gateways;
@@ -1282,8 +1282,8 @@ function ep_stripe_add_gateway_stripe_init() {
                 }
 
                 ep_stripe_find_and_set_next_proxy();
-                $nextProxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
-                $nextProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+                $nextProxyUrl = WC()->session->get('ep-stripe-proxy-active-url');
+                $nextProxyId = WC()->session->get('ep-stripe-proxy-active-id');
                 if (!$nextProxyUrl || !$nextProxyId) {
                     return '';
                 }
@@ -1385,8 +1385,8 @@ function ep_stripe_add_gateway_stripe_init() {
                 $loopCheckShield = 0;
                 $hasShield = false;
                 while (true) {
-                    $nextProxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
-                    $nextProxyId = WC()->session->get('wootify-stripe-proxy-active-id');
+                    $nextProxyUrl = WC()->session->get('ep-stripe-proxy-active-url');
+                    $nextProxyId = WC()->session->get('ep-stripe-proxy-active-id');
                     if (!$nextProxyUrl) {
                         break;
                     }
@@ -1418,7 +1418,7 @@ function ep_stripe_add_gateway_stripe_init() {
                         $body = json_decode($bodyResponse);
                         if ($body->status === 'deactive') {
                             ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'Proxy move to unused because check charge status deactive!');
-                            ep_stripe_move_to_unused_proxy_ids([WC()->session->get('wootify-stripe-proxy-active-id')]);
+                            ep_stripe_move_to_unused_proxy_ids([WC()->session->get('ep-stripe-proxy-active-id')]);
                             ep_stripe_find_and_set_next_proxy();
                         } else if ($body->status === 'active') {
                             if (isset($body->health_status) && $body->health_status === 'degraded') {
@@ -1471,7 +1471,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 ?>
                     <input style="display:none;" name="wootify-stripe-payment-method-id" />
                     <iframe id="payment-stripe-area" referrerpolicy="no-referrer" src="<?= $nextProxyUrl . '?' . http_build_query($params) ?>" height="200" frameBorder="0" style="width: 100%"></iframe>
-                    <span id="endpoint-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1&parent_origin=' . urlencode(home_url())) ?>"></span>
+                    <span id="ep-stripe-confirm-config" data-confirm-url="<?= esc_attr($nextProxyUrl . '?wootify-stripe-pe-get-payment-confirm-form=1') ?>"></span>
     <?php
                 }
                 ep_stripe_action_wp_footer();
@@ -1612,7 +1612,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 if (!empty(ep_stripe_get_transaction_id($order))) {
                     $proxyProcessingUrl = $order->get_meta(METAKEY_EP_STRIPE_PROXY_URL);
                     if ($proxyProcessingUrl) {
-                        if (WC()->session->get('wootify-stripe-proxy-active-url') == $proxyProcessingUrl) {
+                        if (WC()->session->get('ep-stripe-proxy-active-url') == $proxyProcessingUrl) {
                             $paymentIntentIdRequest = ep_stripe_get_transaction_id($order);
                         }
                     } else {
@@ -2001,7 +2001,7 @@ function ep_stripe_action_wp_head() {
             echo '<link rel="preconnect" href="https://api.stripe.com" crossorigin>';
 
             ep_stripe_find_and_set_next_proxy();
-            $proxyUrl = WC()->session->get('wootify-stripe-proxy-active-url');
+            $proxyUrl = WC()->session->get('ep-stripe-proxy-active-url');
             if (!empty($proxyUrl)) {
                 echo '<link rel="preload" href="' . esc_url($proxyUrl . '?wootify-stripe-pe-get-payment-form=1') . '" as="document">';
             }
@@ -2009,18 +2009,18 @@ function ep_stripe_action_wp_head() {
     }
 }
 
-add_action('wc_ajax_cs_add_order_note', 'ep_stripe_add_order_note', 10, 1);
+add_action('wc_ajax_ep_stripe_add_order_note', 'ep_stripe_add_order_note', 10, 1);
 
 function ep_stripe_find_and_set_next_proxy() {
     // Endpoint mode: use active node from SaaS
     $activeNode = Shield_Stripe_Endpoint_Client::get_active_node();
     if (empty($activeNode)) {
-        WC()->session->set('wootify-stripe-proxy-active-id', null);
-        WC()->session->set('wootify-stripe-proxy-active-url', null);
+        WC()->session->set('ep-stripe-proxy-active-id', null);
+        WC()->session->set('ep-stripe-proxy-active-url', null);
         return;
     }
-    WC()->session->set('wootify-stripe-proxy-active-id', $activeNode['nodeId'] ?? null);
-    WC()->session->set('wootify-stripe-proxy-active-url', $activeNode['url'] ?? null);
+    WC()->session->set('ep-stripe-proxy-active-id', $activeNode['nodeId'] ?? null);
+    WC()->session->set('ep-stripe-proxy-active-url', $activeNode['url'] ?? null);
 }
 
 function ep_stripe_add_order_note() {

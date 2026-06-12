@@ -5,6 +5,10 @@ var pendingConfirmationToken = null;
 var linkAvailabilityState = "unknown";
 var linkUnavailableReason = "";
 
+// Parent origin is resolved via postMessage handshake (event.origin is browser-enforced,
+// cannot be spoofed) instead of a URL parameter — keeps site2 domain out of the iframe URL.
+var resolvedParentOrigin = "";
+
 function csStripeLinkNormalizeOrigin(origin) {
   if (!origin || !window.URL) {
     return origin ? origin.replace(/\/$/, "") : "";
@@ -17,12 +21,45 @@ function csStripeLinkNormalizeOrigin(origin) {
 }
 
 function csStripeLinkTargetOrigin() {
-  return window.parentOrigin ? csStripeLinkNormalizeOrigin(window.parentOrigin) : "*";
+  return resolvedParentOrigin ? csStripeLinkNormalizeOrigin(resolvedParentOrigin) : "*";
+}
+
+// Handle handshake: parent sends wootify-parentHandshake → we capture event.origin
+// and respond so parent knows we are ready.
+function csStripeLinkHandleHandshake(event) {
+  if (typeof event.data !== "object" || event.data.name !== "wootify-parentHandshake") {
+    return;
+  }
+  if (!resolvedParentOrigin && event.origin && event.origin !== "null") {
+    resolvedParentOrigin = event.origin;
+  }
+  // Respond so parent knows iframe accepted handshake
+  try {
+    event.source.postMessage({ name: "wootify-parentHandshakeAck" }, event.origin || "*");
+  } catch (e) {}
+  // Trigger availability broadcast now that we know the target
+  csStripeLinkPostAvailability();
+}
+
+if (window.addEventListener) {
+  window.addEventListener("message", csStripeLinkHandleHandshake);
+} else {
+  window.attachEvent("onmessage", csStripeLinkHandleHandshake);
 }
 
 function csStripeLinkPost(message) {
   parent.postMessage(message, csStripeLinkTargetOrigin());
 }
+
+// Restore parent origin from sessionStorage (3DS redirect case: iframe reloads
+// without parent_origin in URL, but sessionStorage persists within the same tab).
+if (!resolvedParentOrigin) {
+  try {
+    var stored = sessionStorage.getItem("wootify_link_parent_origin");
+    if (stored) { resolvedParentOrigin = stored; }
+  } catch (e) {}
+}
+
 
 function csStripeLinkPostAvailability() {
   if (linkAvailabilityState === "ready") {
@@ -202,9 +239,19 @@ if (window.addEventListener) {
   window.attachEvent("onmessage", csStripeLinkListener);
 }
 
+// Fallback: also accept parentOrigin from URL if transitional (will be removed later)
+if (!resolvedParentOrigin && window.parentOrigin) {
+  resolvedParentOrigin = window.parentOrigin;
+}
+
 function csStripeLinkListener(event) {
-  if (window.parentOrigin) {
-    var expected = csStripeLinkNormalizeOrigin(window.parentOrigin);
+  // Skip handshake messages — handled by csStripeLinkHandleHandshake
+  if (typeof event.data === "object" && event.data && event.data.name === "wootify-parentHandshake") {
+    return;
+  }
+  // Origin validation: once resolved, only accept messages from the trusted parent
+  if (resolvedParentOrigin) {
+    var expected = csStripeLinkNormalizeOrigin(resolvedParentOrigin);
     var actual = csStripeLinkNormalizeOrigin(event.origin);
     if (actual !== expected) {
       return;
@@ -235,11 +282,19 @@ function csStripeLinkListener(event) {
     return;
   }
 
+  // Persist resolved parent origin in sessionStorage so it survives the 3DS redirect
+  // without needing to embed it in the return_url (which Stripe.js can read).
+  try {
+    if (resolvedParentOrigin) {
+      sessionStorage.setItem("wootify_link_parent_origin", resolvedParentOrigin);
+    }
+  } catch (e) {}
+
   stripe.confirmPayment({
     clientSecret: clientSecret,
     confirmParams: {
       confirmation_token: pendingConfirmationToken,
-      return_url: window.location.href.split("?")[0] + "?wootify-stripe-link-express-form=1&amount=" + encodeURIComponent(window.stripeLinkAmount) + "&currency=" + encodeURIComponent(window.stripeLinkCurrency) + "&parent_origin=" + encodeURIComponent(window.parentOrigin || ""),
+      return_url: window.location.href.split("?")[0] + "?wootify-stripe-link-express-form=1&amount=" + encodeURIComponent(window.stripeLinkAmount) + "&currency=" + encodeURIComponent(window.stripeLinkCurrency),
     },
     redirect: "if_required",
   }).then(function (result) {

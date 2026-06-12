@@ -7,6 +7,25 @@ jQuery(function ($) {
 
     var STRIPE_LINK_REQUIRED_FIELDS_MESSAGE = 'Please fill in the required checkout fields before using Link.';
 
+    /**
+     * Send postMessage handshake to an iframe so it can capture our origin
+     * (event.origin) instead of reading it from the URL parameter.
+     * This keeps site2 domain out of iframe URLs readable by Stripe.js.
+     */
+    function sendParentHandshake(iframe, expectedOrigin) {
+        if (!iframe || !iframe.contentWindow) { return; }
+        var target = expectedOrigin || '*';
+        try {
+            iframe.contentWindow.postMessage({ name: 'wootify-parentHandshake' }, target);
+        } catch (e) {}
+    }
+
+    function sendLinkExpressHandshake() {
+        var iframe = document.getElementById('payment-stripe-link-area');
+        var expectedOrigin = getStripeLinkExpectedOrigin();
+        sendParentHandshake(iframe, expectedOrigin || '*');
+    }
+
     function loadPaymentProcess() {
         setTimeout(function () {
             if (!window.WOOTIFY_stripe_checkout_error) {
@@ -293,6 +312,9 @@ jQuery(function ($) {
                 clearTimeout(window.WOOTIFY_stripe_frame_watch_timer);
             }
             $('.woocommerce-checkout-payment').unblock();
+            // Send handshake to payment form iframe now that it is loaded
+            var paymentIframe = document.getElementById('payment-stripe-area');
+            sendParentHandshake(paymentIframe, getStripeLinkExpectedOrigin() || '*');
         }
         if (event.data === 'wootify-paymentFormCompletedStripe') {
             window.paymentFormCompletedStripe = true;
@@ -349,6 +371,8 @@ jQuery(function ($) {
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkReady') {
             $('#wootify-stripe-link-express-container').show();
             updateStripeLinkValidationOverlay();
+            // Send handshake to Link Express iframe so it can learn our origin
+            sendLinkExpressHandshake();
         }
         if ((typeof event.data === 'object') && event.data.name === 'wootify-stripeLinkUnavailable') {
             $('#wootify-stripe-link-express-container').hide();
@@ -393,6 +417,9 @@ jQuery(function ($) {
                 window.cs_confirm_retry_timer = null;
             }
             window.cs_confirm_iframe_ready = true;
+            // Send handshake to confirm iframe so it knows our origin without URL param
+            var confirmIframe = document.getElementById('payment-area-stripe-to-confirm');
+            sendParentHandshake(confirmIframe, getStripeLinkExpectedOrigin() || '*');
             trySendConfirm();
         }
 
@@ -898,6 +925,12 @@ jQuery(function ($) {
     function onHashChange() {
         var partials = window.location.hash.match(/^#?cs-confirm-pi-([^:]+):(.+):(.+)$/);
         if (!partials || 4 > partials.length) {
+            return;
+        }
+
+        var confirmUrl = getStripeConfirmUrl();
+        if (!confirmUrl) {
+            console.log('Shield Manager Stripe: No confirm URL found. Skipping hashchange handler.');
             return;
         }
 

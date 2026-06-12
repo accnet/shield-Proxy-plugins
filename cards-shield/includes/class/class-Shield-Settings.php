@@ -345,11 +345,30 @@ class ShieldSettings {
             $order_id = is_object($metadata) && isset($metadata->woo_order_id)
                 ? (string) $metadata->woo_order_id
                 : ($existing_payment['order_id'] ?? '');
-            $manager_callback_url = is_object($metadata) && isset($metadata->manager_callback_url)
-                ? esc_url_raw((string) $metadata->manager_callback_url)
-                : ($existing_payment['manager_callback_url'] ?? '');
-            $shield_id = is_object($metadata) && isset($metadata->shield_id)
-                ? (string) $metadata->shield_id
+
+            // --- Callback URL resolution (3-tier) ---
+            $route_id = is_object($metadata) && isset($metadata->route_id)
+                ? sanitize_text_field((string) $metadata->route_id)
+                : '';
+
+            $manager_callback_url = '';
+
+            // Tier 1: route_id → transient (new, highest priority)
+            if ($route_id !== '') {
+                $route_data = get_transient('shield_route_' . $route_id);
+                if (is_array($route_data) && !empty($route_data['manager_callback_url'])) {
+                    $manager_callback_url = esc_url_raw((string) $route_data['manager_callback_url']);
+                }
+            }
+
+            // Tier 2: local payment tracking (keep permanently)
+            if ($manager_callback_url === '') {
+                $manager_callback_url = esc_url_raw((string) ($existing_payment['manager_callback_url'] ?? ''));
+            }
+
+            // --- End resolution ---
+            $shield_id = is_object($metadata) && isset($metadata->processor_id)
+                ? (string) $metadata->processor_id
                 : ($existing_payment['shield_id'] ?? '');
             $payments[$payment_intent_id] = array_merge($existing_payment, [
                 'payment_intent_id' => $payment_intent_id,
@@ -381,11 +400,12 @@ class ShieldSettings {
                 'mode' => $matched_mode,
                 'orderId' => is_object($metadata) && isset($metadata->woo_order_id) ? (string) $metadata->woo_order_id : ($existing_payment['order_id'] ?? null),
                 'orderInvoice' => is_object($metadata) && isset($metadata->order_id) ? (string) $metadata->order_id : ($existing_payment['order_invoice'] ?? null),
-                'shieldId' => is_object($metadata) && isset($metadata->shield_id) ? (string) $metadata->shield_id : ($existing_payment['shield_id'] ?? null),
+                'shieldId' => is_object($metadata) && isset($metadata->processor_id) ? (string) $metadata->processor_id : ($existing_payment['shield_id'] ?? null),
                 'managerId' => is_object($metadata) && isset($metadata->manager_id) ? (string) $metadata->manager_id : ($existing_payment['manager_id'] ?? null),
                 'proxyId' => home_url(),
                 'proxyUrl' => home_url(),
-                'managerCallbackUrl' => is_object($metadata) && isset($metadata->manager_callback_url) ? (string) $metadata->manager_callback_url : ($existing_payment['manager_callback_url'] ?? null),
+                'managerCallbackUrl' => $manager_callback_url,
+                'routeId' => $route_id,
                 'occurredAt' => current_time('mysql'),
                 'traceId' => $existing_payment['trace_id'] ?? '',
                 'is3dsCandidate' => true,
@@ -2045,6 +2065,13 @@ class ShieldSettings {
         $credential = $this->find_active_manager_hmac_credential($manager_id);
 
         if (!$callback_url || !$manager_id || !$credential) {
+            $this->log_stripe_webhook('warning', 'Stripe webhook direct callback: missing routing data', [
+                'manager_id'        => $manager_id,
+                'route_id'          => $payload['routeId'] ?? null,
+                'payment_intent_id' => $payload['paymentIntentId'] ?? null,
+                'has_callback_url'  => !empty($callback_url),
+                'has_credential'    => !empty($credential),
+            ]);
             return [
                 'attempted' => false,
                 'success' => false,

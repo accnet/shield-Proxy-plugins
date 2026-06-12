@@ -12,19 +12,19 @@
  * Plugin Name: Shield Proxy Manager
  * Plugin URI:  https://wootify.dev
  * Description: Shield Proxy Manager
- * Version:     2.1.7
+ * Version:     2.1.8
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: CS
  * License:     GPL v2 or later
  * License URI: http://www.gnu.org/licenses/gpl-2.0.txt
- */
+  */
 if (!defined('ABSPATH')) {
   exit;
 }
 if (!function_exists('is_plugin_active'))
   require_once(ABSPATH . '/wp-admin/includes/plugin.php');
-define('SHILED_PROXY_VERSION', '2.1.7');
+define('SHILED_PROXY_VERSION', '2.1.8');
 if (!defined('SHIELD_MANAGER_PLUGIN_FILE')) {
   define('SHIELD_MANAGER_PLUGIN_FILE', __FILE__);
 }
