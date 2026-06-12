@@ -519,12 +519,19 @@ class Shield_Stripe_Endpoint_Client
         $timestamp = (string) time();
         $signature = hash_hmac('sha256', $timestamp . '.' . $body, $secret);
 
+        // Use get_option('siteurl') rather than get_site_url() so the URL always
+        // matches the siteUrl that was registered with SaaS at connect time.
+        // get_site_url() can return https:// when serving via HTTPS (e.g. checkout),
+        // while the SaaS connection was created with http:// from the admin panel.
+        $site_url = rtrim(get_option('siteurl', get_site_url()), '/');
+
         return [
             'X-Endpoint-Signature' => $signature,
             'X-Endpoint-Timestamp' => $timestamp,
-            'X-Endpoint-Site-Url'  => get_site_url(),
+            'X-Endpoint-Site-Url'  => $site_url,
         ];
     }
+
 
     /**
      * Build HMAC headers for proxy requests to site1 using derivedKey.
