@@ -1555,7 +1555,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                 ob_start();
                 ?>
                 <div id="wootify-stripe-link-express-container" class="cs-stripe-link-express" style="display:none">
-                    <div id="stripe-link-express-text">Express Checkout</div>
+                    <!-- <div id="stripe-link-express-text">Express Checkout</div> -->
                     <iframe id="payment-stripe-link-area"
                             referrerpolicy="no-referrer"
                             allow="payment *"
@@ -1956,14 +1956,13 @@ function WOOTIFY_add_gateway_stripe_init() {
                     ];
                 } else {
                     csStripeErrorLog([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe request payment error');
-                    // Empty cart
-                    $order->update_status('failed');
+                    // Handle duplicate_request BEFORE setting failed to prevent unwanted
+                    // side-effect hooks (email, stock restore) from firing on a race condition.
                     if ($body->code === 'duplicate_request') {
                         // Lock is protecting against double charge — do NOT mark order failed.
                         // If a PI already exists, request 1 may have succeeded or be in-flight.
                         $existingPiId = csStripeGetTransactionId($order);
                         if ($existingPiId) {
-                            $order->update_status('pending'); // restore from 'failed' we just set
                             $order->add_order_note(sprintf(
                                 __('Stripe idempotency lock active (duplicate request blocked by proxy %s). Order held pending. PI: %s', 'wootify'),
                                 $activatedProxy['url'],
@@ -1982,11 +1981,15 @@ function WOOTIFY_add_gateway_stripe_init() {
                             'trace_id'  => $traceId,
                             'proxy_url' => $activatedProxy['url'],
                         ], 'Stripe duplicate_request — no PI found, treating as transient lock error');
-                        $order->update_status('pending'); // restore; caller can retry
                         $order->save();
                         wc_add_notice(__('Your payment is being processed. Please wait a moment and check your order status before trying again.', 'wootify'), 'error');
                         return false;
-                    } elseif ($body->code === 'domain_whitelist_not_allow') {
+                    }
+
+                    // For all other error codes: mark order failed now
+                    $order->update_status('failed');
+
+                    if ($body->code === 'domain_whitelist_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
@@ -2034,7 +2037,7 @@ function WOOTIFY_add_gateway_stripe_init() {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s, Payment Intent ID: %s', 'wootify'),
                             $activatedProxy['url'],
-                            is_string($err) ?: $err->message,
+                            is_string($err) ? $err : ($err->message ?? 'Unknown error'),
                             $paymentIntentId
                         ));
                     }

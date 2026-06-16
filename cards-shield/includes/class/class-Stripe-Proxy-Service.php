@@ -34,12 +34,16 @@ class Shield_Stripe_Proxy_Service {
             return $validationError;
         }
 
+        $orderId = $this->normalizeReference($payload['order_id'] ?? null);
+        $orderInvoice = $this->normalizeReference($payload['order_invoice'] ?? null) ?: $orderId;
+        $shieldId = $this->normalizeReference($payload['shield_id'] ?? null);
+        $managerCallbackUrl = esc_url_raw((string) ($payload['manager_callback_url'] ?? ''));
         $amountDecimal = (float) $payload['amount'];
         $currency = strtolower((string) $payload['currency']);
         $amountMinor = $this->normalizeAmountToMinor($amountDecimal, $currency);
         $shipping = (isset($payload['shipping']) && is_array($payload['shipping'])) ? $payload['shipping'] : [];
         $idempotencyKey = $this->buildIdempotencyKey([
-            (string) ($payload['order_id'] ?? ''),
+            (string) $orderId,
             (string) ($payload['payment_intent'] ?? ''),
             (string) ($payload['payment_method_id'] ?? ''),
             (string) ($payload['amount'] ?? ''),
@@ -51,7 +55,7 @@ class Shield_Stripe_Proxy_Service {
             // Only log a partial hash of the idempotency key to avoid exposing order_id+PI combinations in logs.
             $this->log('warning', 'Stripe duplicate make-payment request blocked by idempotency lock', [
                 'idempotency_hash' => substr(md5($idempotencyKey), 0, 8),
-                'order_id'         => isset($payload['order_id']) ? (string) $payload['order_id'] : null,
+                'order_id'         => $orderId,
                 'manager_id'       => $this->managerId,
                 'trace_id'         => $this->traceId,
             ]);
@@ -107,11 +111,13 @@ class Shield_Stripe_Proxy_Service {
                     'metadata' => [
                         'customer_email' => (string) ($payload['customer_email'] ?? ''),
                         'customer_name' => (string) ($payload['name'] ?? ''),
-                        'order_id' => (string) ($payload['order_invoice'] ?? ''),
-                        'woo_order_id' => (string) ($payload['order_id'] ?? ''),
-                        'processor_id' => (string) ($payload['shield_id'] ?? ''),
+                        'order_id' => (string) ($orderInvoice ?? ''),
+                        'woo_order_id' => (string) ($orderId ?? ''),
+                        'processor_id' => (string) ($shieldId ?? ''),
                         'manager_id' => $this->managerId,
+                        'manager_callback_url' => $managerCallbackUrl,
                         'route_id' => $routeId,
+                        'trace_id' => $this->traceId,
                         'merchant_site' => home_url(),
                     ],
                 ], [
@@ -143,9 +149,9 @@ class Shield_Stripe_Proxy_Service {
                 'nextState' => (string) $paymentIntent->status,
                 'amount' => $amountDecimal,
                 'currency' => strtoupper($currency),
-                'orderId' => (string) ($payload['order_id'] ?? ''),
-                'orderNumber' => (string) ($payload['order_invoice'] ?? ''),
-                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'orderId' => $orderId,
+                'orderNumber' => $orderInvoice,
+                'site2Url' => $managerCallbackUrl,
                 'metadata' => [
                     'amount' => $amountDecimal,
                     'currency' => strtoupper($currency),
@@ -158,10 +164,10 @@ class Shield_Stripe_Proxy_Service {
                 Helpers::trackStripeWebhookPayment($paymentIntent->id, [
                     'mode' => $this->detectMode(),
                     'state' => 'requires_action',
-                    'order_id' => (string) ($payload['order_id'] ?? ''),
-                    'order_invoice' => (string) ($payload['order_invoice'] ?? ''),
-                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
-                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'order_id' => $orderId,
+                    'order_invoice' => $orderInvoice,
+                    'shield_id' => $shieldId,
+                    'manager_callback_url' => $managerCallbackUrl,
                     'manager_id' => $this->managerId,
                     'proxy_id' => home_url(),
                     'trace_id' => $this->traceId,
@@ -191,13 +197,17 @@ class Shield_Stripe_Proxy_Service {
             return $validationError;
         }
 
+        $orderId = $this->normalizeReference($payload['order_id'] ?? null);
+        $orderInvoice = $this->normalizeReference($payload['order_invoice'] ?? null) ?: $orderId;
+        $shieldId = $this->normalizeReference($payload['shield_id'] ?? null);
+        $managerCallbackUrl = esc_url_raw((string) ($payload['manager_callback_url'] ?? ''));
         $amountDecimal = (float) $payload['amount'];
         $currency = strtolower((string) $payload['currency']);
         $amountMinor = $this->normalizeAmountToMinor($amountDecimal, $currency);
         $shipping = (isset($payload['shipping']) && is_array($payload['shipping'])) ? $payload['shipping'] : [];
         $idempotencyKey = $this->buildIdempotencyKey([
             'link',
-            (string) ($payload['order_id'] ?? ''),
+            (string) $orderId,
             (string) ($payload['confirmation_token'] ?? ''),
             (string) ($payload['amount'] ?? ''),
             $currency,
@@ -220,11 +230,13 @@ class Shield_Stripe_Proxy_Service {
                 'metadata' => [
                     'customer_email' => (string) ($payload['customer_email'] ?? ''),
                     'customer_name' => (string) ($payload['name'] ?? ''),
-                    'order_id' => (string) ($payload['order_invoice'] ?? ''),
-                    'woo_order_id' => (string) ($payload['order_id'] ?? ''),
-                    'processor_id' => (string) ($payload['shield_id'] ?? ''),
+                    'order_id' => (string) ($orderInvoice ?? ''),
+                    'woo_order_id' => (string) ($orderId ?? ''),
+                    'processor_id' => (string) ($shieldId ?? ''),
                     'manager_id' => $this->managerId,
+                    'manager_callback_url' => $managerCallbackUrl,
                     'route_id' => $routeId,
+                    'trace_id' => $this->traceId,
                     'merchant_site' => home_url(),
                     'funding_source' => 'link_express',
                 ],
@@ -238,10 +250,10 @@ class Shield_Stripe_Proxy_Service {
             Helpers::trackStripeWebhookPayment($paymentIntent->id, [
                 'mode' => $this->detectMode(),
                 'state' => isset($paymentIntent->status) ? (string) $paymentIntent->status : 'requires_payment_method',
-                'order_id' => (string) ($payload['order_id'] ?? ''),
-                'order_invoice' => (string) ($payload['order_invoice'] ?? ''),
-                'shield_id' => (string) ($payload['shield_id'] ?? ''),
-                'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'order_id' => $orderId,
+                'order_invoice' => $orderInvoice,
+                'shield_id' => $shieldId,
+                'manager_callback_url' => $managerCallbackUrl,
                 'manager_id' => $this->managerId,
                 'proxy_id' => home_url(),
                 'trace_id' => $this->traceId,
@@ -255,9 +267,9 @@ class Shield_Stripe_Proxy_Service {
                 'nextState' => (string) $paymentIntent->status,
                 'amount' => $amountDecimal,
                 'currency' => strtoupper($currency),
-                'orderId' => (string) ($payload['order_id'] ?? ''),
-                'orderNumber' => (string) ($payload['order_invoice'] ?? ''),
-                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'orderId' => $orderId,
+                'orderNumber' => $orderInvoice,
+                'site2Url' => $managerCallbackUrl,
                 'metadata' => [
                     'amount' => $amountDecimal,
                     'currency' => strtoupper($currency),
@@ -308,6 +320,26 @@ class Shield_Stripe_Proxy_Service {
 
             $status = $paymentIntent->status;
             $normalizedStatus = in_array($status, ['succeeded', 'requires_capture'], true) ? 'success' : $status;
+            $metadata = isset($paymentIntent->metadata) && is_object($paymentIntent->metadata) ? $paymentIntent->metadata : null;
+            $orderId = $this->normalizeReference($payload['order_id'] ?? null);
+            if ($orderId === null && is_object($metadata) && isset($metadata->woo_order_id)) {
+                $orderId = $this->normalizeReference((string) $metadata->woo_order_id);
+            }
+            $orderInvoice = $this->normalizeReference($payload['order_invoice'] ?? null);
+            if ($orderInvoice === null && is_object($metadata) && isset($metadata->order_id)) {
+                $orderInvoice = $this->normalizeReference((string) $metadata->order_id);
+            }
+            if ($orderInvoice === null) {
+                $orderInvoice = $orderId;
+            }
+            $shieldId = $this->normalizeReference($payload['shield_id'] ?? null);
+            if ($shieldId === null && is_object($metadata) && isset($metadata->processor_id)) {
+                $shieldId = $this->normalizeReference((string) $metadata->processor_id);
+            }
+            $managerCallbackUrl = esc_url_raw((string) ($payload['manager_callback_url'] ?? ''));
+            if ($managerCallbackUrl === '' && is_object($metadata) && isset($metadata->manager_callback_url)) {
+                $managerCallbackUrl = esc_url_raw((string) $metadata->manager_callback_url);
+            }
 
             $this->log('info', 'Stripe confirm-payment completed', [
                 'payment_intent_id' => $paymentIntentId,
@@ -320,8 +352,9 @@ class Shield_Stripe_Proxy_Service {
                 'nextState' => (string) $status,
                 'amount' => isset($payload['amount']) ? (float) $payload['amount'] : null,
                 'currency' => isset($payload['currency']) ? strtoupper((string) $payload['currency']) : null,
-                'orderId' => (string) ($payload['order_id'] ?? ''),
-                'site2Url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                'orderId' => $orderId,
+                'orderNumber' => $orderInvoice,
+                'site2Url' => $managerCallbackUrl,
                 'metadata' => [
                     'is_3ds' => in_array($status, ['requires_action', 'processing'], true),
                 ],
@@ -331,9 +364,10 @@ class Shield_Stripe_Proxy_Service {
                 Helpers::trackStripeWebhookPayment($paymentIntentId, [
                     'mode' => $this->detectMode(),
                     'state' => $status,
-                    'order_id' => (string) ($payload['order_id'] ?? ''),
-                    'shield_id' => (string) ($payload['shield_id'] ?? ''),
-                    'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
+                    'order_id' => $orderId,
+                    'order_invoice' => $orderInvoice,
+                    'shield_id' => $shieldId,
+                    'manager_callback_url' => $managerCallbackUrl,
                     'manager_id' => $this->managerId,
                     'proxy_id' => home_url(),
                     'trace_id' => $this->traceId,
@@ -534,8 +568,8 @@ class Shield_Stripe_Proxy_Service {
     }
 
     private function validateMakePaymentPayload(array $payload) {
-        if (empty($payload['amount']) || empty($payload['currency']) || empty($payload['payment_method_id'])) {
-            return $this->errorResponse(400, 'invalid_payload', 'amount, currency, and payment_method_id are required', 'ERROR');
+        if (empty($payload['amount']) || empty($payload['currency']) || empty($payload['payment_method_id']) || empty($payload['order_id']) || empty($payload['shield_id'])) {
+            return $this->errorResponse(400, 'invalid_payload', 'amount, currency, payment_method_id, order_id, and shield_id are required', 'ERROR');
         }
         if ((float) $payload['amount'] <= 0) {
             return $this->errorResponse(400, 'invalid_amount', 'amount must be greater than zero', 'ERROR');
@@ -636,6 +670,19 @@ class Shield_Stripe_Proxy_Service {
         ], $data));
     }
 
+    private function normalizeReference($value): ?string {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = sanitize_text_field((string) $value);
+        if ($normalized === '' || $normalized === '0') {
+            return null;
+        }
+
+        return $normalized;
+    }
+
     private function log($level, $message, array $context = []) {
         $payload = array_merge([
             'source' => $this->source,
@@ -691,8 +738,10 @@ class Shield_Stripe_Proxy_Service {
             'route_id'             => $routeId,
             'manager_callback_url' => esc_url_raw((string) ($payload['manager_callback_url'] ?? '')),
             'manager_id'           => $this->managerId,
-            'shield_id'            => (string) ($payload['shield_id'] ?? ''),
-            'woo_order_id'         => (string) ($payload['order_id'] ?? ''),
+            'shield_id'            => $this->normalizeReference($payload['shield_id'] ?? null),
+            'woo_order_id'         => $this->normalizeReference($payload['order_id'] ?? null),
+            'order_invoice'        => $this->normalizeReference($payload['order_invoice'] ?? null) ?: $this->normalizeReference($payload['order_id'] ?? null),
+            'trace_id'             => $this->traceId,
             'payment_intent_id'    => '',
             'created_at'           => current_time('mysql'),
         ];

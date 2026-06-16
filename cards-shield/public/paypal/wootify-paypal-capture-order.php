@@ -44,6 +44,7 @@ try {
 		$capture = $orderCaptureResult['order']['purchase_units'][0]['payments']['captures'][0] ?? [];
 		$captureId = is_array($capture) && !empty($capture['id']) ? (string) $capture['id'] : $orderID;
 		$currency = is_array($capture) && !empty($capture['amount']['currency_code']) ? (string) $capture['amount']['currency_code'] : (string) ($_GET['currency'] ?? '');
+		$fundingSource = Helpers::extractPayPalFundingSource($orderCaptureResult['order'] ?? null);
 		if (method_exists('Helpers', 'queuePaymentTransitionLog')) {
 			Helpers::queuePaymentTransitionLog([
 				'gateway' => 'paypal',
@@ -61,6 +62,7 @@ try {
 					'amount' => isset($_GET['total']) ? (float) $_GET['total'] : null,
 					'currency' => $currency ? strtoupper($currency) : null,
 					'gateway_response_code' => (string) $status,
+					'funding_source' => $fundingSource,
 				],
 			]);
 		}

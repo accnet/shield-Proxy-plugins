@@ -761,7 +761,8 @@ function handlePaypalButtonCreateWooOrder($cart, $ppOrderId, $currentProxyId, $c
         }
     }
     $order->update_meta_data('_cs_paypal_checkout_page', 'express');
-    $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+    $fundingSource = cs_paypal_extract_funding_source_from_payment_source($data->order ?? null);
+    $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
         if ($wootifyPPGateway->intent == OPT_CS_PAYPAL_AUTHORIZE) {
@@ -944,7 +945,8 @@ function handlePaypalButtonCreateWooOrderAtPayForOrder($order_id, $ppOrderId, $c
         }
     }
     $order->update_meta_data('_cs_paypal_checkout_page', 'express');
-    $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+    $fundingSource = cs_paypal_extract_funding_source_from_payment_source($data->order ?? null);
+    $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
         if ($wootifyPPGateway->intent == OPT_CS_PAYPAL_AUTHORIZE) {
@@ -1390,7 +1392,7 @@ function WOOTIFY_init_gateway_class() {
                     <?php
                     if ($isCheckoutPage) {
                     ?>
-                        <div id="paypal-button-express-text" class="cs_pp_element">Express Checkout</div>
+                        <!-- <div id="paypal-button-express-text" class="cs_pp_element">Express Checkout</div> -->
                     <?php
                     } else {
                     ?>

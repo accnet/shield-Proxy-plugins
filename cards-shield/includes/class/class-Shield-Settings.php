@@ -341,46 +341,67 @@ class ShieldSettings {
         }
         update_option(self::OPT_STRIPE_WEBHOOK_EVENTS, $processed_events);
 
+        $order_id = is_object($metadata) && isset($metadata->woo_order_id)
+            ? (string) $metadata->woo_order_id
+            : ($existing_payment['order_id'] ?? '');
+        $order_invoice = is_object($metadata) && isset($metadata->order_id)
+            ? (string) $metadata->order_id
+            : ($existing_payment['order_invoice'] ?? '');
+        $trace_id = is_object($metadata) && isset($metadata->trace_id)
+            ? (string) $metadata->trace_id
+            : ($existing_payment['trace_id'] ?? '');
+        $route_id = is_object($metadata) && isset($metadata->route_id)
+            ? sanitize_text_field((string) $metadata->route_id)
+            : '';
+        $route_data = [];
+        $manager_callback_url = is_object($metadata) && isset($metadata->manager_callback_url)
+            ? esc_url_raw((string) $metadata->manager_callback_url)
+            : esc_url_raw((string) ($existing_payment['manager_callback_url'] ?? ''));
+        $shield_id = is_object($metadata) && isset($metadata->processor_id)
+            ? (string) $metadata->processor_id
+            : ($existing_payment['shield_id'] ?? '');
+        $manager_id = is_object($metadata) && isset($metadata->manager_id)
+            ? (string) $metadata->manager_id
+            : ($existing_payment['manager_id'] ?? '');
+
         if ($payment_intent_id !== '' && $transition_applied) {
-            $order_id = is_object($metadata) && isset($metadata->woo_order_id)
-                ? (string) $metadata->woo_order_id
-                : ($existing_payment['order_id'] ?? '');
-
             // --- Callback URL resolution (3-tier) ---
-            $route_id = is_object($metadata) && isset($metadata->route_id)
-                ? sanitize_text_field((string) $metadata->route_id)
-                : '';
-
-            $manager_callback_url = '';
-
             // Tier 1: route_id → transient (new, highest priority)
             if ($route_id !== '') {
                 $route_data = get_transient('shield_route_' . $route_id);
                 if (is_array($route_data) && !empty($route_data['manager_callback_url'])) {
                     $manager_callback_url = esc_url_raw((string) $route_data['manager_callback_url']);
                 }
+                if ($order_id === '' && !empty($route_data['woo_order_id'])) {
+                    $order_id = (string) $route_data['woo_order_id'];
+                }
+                if ($order_invoice === '' && !empty($route_data['order_invoice'])) {
+                    $order_invoice = (string) $route_data['order_invoice'];
+                }
+                if ($trace_id === '' && !empty($route_data['trace_id'])) {
+                    $trace_id = (string) $route_data['trace_id'];
+                }
             }
 
             // Tier 2: local payment tracking (keep permanently)
-            if ($manager_callback_url === '') {
-                $manager_callback_url = esc_url_raw((string) ($existing_payment['manager_callback_url'] ?? ''));
-            }
-
             // --- End resolution ---
-            $shield_id = is_object($metadata) && isset($metadata->processor_id)
-                ? (string) $metadata->processor_id
-                : ($existing_payment['shield_id'] ?? '');
+            if ($shield_id === '' && !empty($route_data['shield_id'])) {
+                $shield_id = (string) $route_data['shield_id'];
+            }
+            if ($manager_id === '' && !empty($route_data['manager_id'])) {
+                $manager_id = (string) $route_data['manager_id'];
+            }
             $payments[$payment_intent_id] = array_merge($existing_payment, [
                 'payment_intent_id' => $payment_intent_id,
                 'mode' => $matched_mode,
                 'state' => $state,
                 'order_id' => $order_id,
-                'order_invoice' => is_object($metadata) && isset($metadata->order_id) ? (string) $metadata->order_id : ($existing_payment['order_invoice'] ?? ''),
+                'order_invoice' => $order_invoice,
                 'shield_id' => $shield_id,
                 'manager_callback_url' => $manager_callback_url,
-                'manager_id' => is_object($metadata) && isset($metadata->manager_id) ? (string) $metadata->manager_id : ($existing_payment['manager_id'] ?? ''),
+                'manager_id' => $manager_id,
                 'proxy_id' => home_url(),
-                'trace_id' => $existing_payment['trace_id'] ?? '',
+                'trace_id' => $trace_id,
                 'event_id' => $event_id,
                 'event_type' => $event_type,
                 'is_3ds_candidate' => $is_candidate,
@@ -398,16 +419,16 @@ class ShieldSettings {
                 'paymentIntentId' => $payment_intent_id,
                 'state' => $state,
                 'mode' => $matched_mode,
-                'orderId' => is_object($metadata) && isset($metadata->woo_order_id) ? (string) $metadata->woo_order_id : ($existing_payment['order_id'] ?? null),
-                'orderInvoice' => is_object($metadata) && isset($metadata->order_id) ? (string) $metadata->order_id : ($existing_payment['order_invoice'] ?? null),
-                'shieldId' => is_object($metadata) && isset($metadata->processor_id) ? (string) $metadata->processor_id : ($existing_payment['shield_id'] ?? null),
-                'managerId' => is_object($metadata) && isset($metadata->manager_id) ? (string) $metadata->manager_id : ($existing_payment['manager_id'] ?? null),
+                'orderId' => $order_id ?: null,
+                'orderInvoice' => $order_invoice ?: null,
+                'shieldId' => $shield_id ?: null,
+                'managerId' => $manager_id ?: null,
                 'proxyId' => home_url(),
                 'proxyUrl' => home_url(),
                 'managerCallbackUrl' => $manager_callback_url,
                 'routeId' => $route_id,
                 'occurredAt' => current_time('mysql'),
-                'traceId' => $existing_payment['trace_id'] ?? '',
+                'traceId' => $trace_id ?: null,
                 'is3dsCandidate' => true,
             ]);
         }
@@ -443,10 +464,10 @@ class ShieldSettings {
                 'ignoredReason'     => $transition_applied ? null : 'stale_state',
                 'amount'            => $amount_minor !== null ? $amount_minor / 100 : null,
                 'currency'          => $currency,
-                'orderId'           => is_object($metadata) && isset($metadata->woo_order_id) ? (string) $metadata->woo_order_id : ($existing_payment['order_id'] ?? null),
-                'orderNumber'       => is_object($metadata) && isset($metadata->order_id) ? (string) $metadata->order_id : ($existing_payment['order_invoice'] ?? null),
-                'managerId'         => is_object($metadata) && isset($metadata->manager_id) ? (string) $metadata->manager_id : ($existing_payment['manager_id'] ?? null),
-                'site2Url'          => is_object($metadata) && isset($metadata->manager_callback_url) ? (string) $metadata->manager_callback_url : ($existing_payment['manager_callback_url'] ?? null),
+                'orderId'           => $order_id ?: null,
+                'orderNumber'       => $order_invoice ?: null,
+                'managerId'         => $manager_id ?: null,
+                'site2Url'          => $manager_callback_url ?: null,
                 'metadata'          => [
                     'amount'                => $amount_minor !== null ? $amount_minor / 100 : null,
                     'currency'              => $currency,

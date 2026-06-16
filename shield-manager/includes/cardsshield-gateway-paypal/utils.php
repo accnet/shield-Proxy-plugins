@@ -1268,3 +1268,98 @@ function csPaypalGetClientIP()
     }
     return $_SERVER['REMOTE_ADDR'] ?? null;
 }
+
+if (!function_exists('cs_paypal_normalize_funding_source')) {
+    function cs_paypal_normalize_funding_source($value) {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = strtolower(sanitize_text_field((string) $value));
+        if ($value === '') {
+            return null;
+        }
+
+        $aliases = [
+            'pay_pal' => 'paypal',
+            'paypal_wallet' => 'paypal',
+            'wallet' => 'paypal',
+            'credit_card' => 'card',
+            'debit_card' => 'card',
+        ];
+
+        if (isset($aliases[$value])) {
+            $value = $aliases[$value];
+        }
+
+        $allowed = ['card', 'paypal', 'venmo', 'apple_pay', 'google_pay', 'paylater'];
+        return in_array($value, $allowed, true) ? $value : null;
+    }
+}
+
+if (!function_exists('cs_paypal_extract_funding_source_from_payment_source')) {
+    function cs_paypal_extract_funding_source_from_payment_source($orderOrPaymentSource) {
+        if (is_object($orderOrPaymentSource)) {
+            $orderOrPaymentSource = (array) $orderOrPaymentSource;
+        }
+        if (!is_array($orderOrPaymentSource) || !$orderOrPaymentSource) {
+            return null;
+        }
+
+        $paymentSource = null;
+        $customId = null;
+
+        if (isset($orderOrPaymentSource['payment_source'])) {
+            $paymentSource = $orderOrPaymentSource['payment_source'];
+        }
+
+        if (isset($orderOrPaymentSource['purchase_units'])) {
+            $purchaseUnits = $orderOrPaymentSource['purchase_units'];
+            if (is_array($purchaseUnits) && !empty($purchaseUnits[0])) {
+                $firstPU = $purchaseUnits[0];
+                if (is_object($firstPU)) {
+                    $firstPU = (array) $firstPU;
+                }
+                if (is_array($firstPU) && isset($firstPU['custom_id'])) {
+                    $customId = $firstPU['custom_id'];
+                }
+            }
+        }
+
+        // Backward compatibility: if it doesn't look like an order, treat it as the payment_source itself
+        if ($paymentSource === null && $customId === null) {
+            $paymentSource = $orderOrPaymentSource;
+        }
+
+        if ($customId !== null) {
+            $normalized = cs_paypal_normalize_funding_source($customId);
+            if ($normalized !== null) {
+                return $normalized;
+            }
+        }
+
+        if ($paymentSource !== null) {
+            if (is_object($paymentSource)) {
+                $paymentSource = (array) $paymentSource;
+            }
+            if (is_array($paymentSource)) {
+                foreach (['card', 'paypal', 'venmo', 'apple_pay', 'google_pay', 'paylater'] as $candidate) {
+                    if (!empty($paymentSource[$candidate])) {
+                        return cs_paypal_normalize_funding_source($candidate);
+                    }
+                }
+
+                foreach ($paymentSource as $candidate => $value) {
+                    if (!empty($value)) {
+                        $normalized = cs_paypal_normalize_funding_source($candidate);
+                        if ($normalized !== null) {
+                            return $normalized;
+                        }
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+}

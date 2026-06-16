@@ -129,8 +129,18 @@ function shield_verify_bootstrap_token(WP_REST_Request $request) {
   return ($expected && $token && hash_equals($expected, $token));
 }
 
-function shield_hmac_v2_nonce_once($manager_id, $nonce, $timestamp) {
-  $transient_key = 'shield_hmac_n_' . md5($manager_id . '|' . $nonce . '|' . (string)$timestamp);
+/**
+ * Consume a nonce: returns true on first use, false on replay.
+ *
+ * @param string $manager_id
+ * @param string $nonce
+ * @param int    $timestamp
+ * @param string $scope  Optional method+route string to prevent cross-endpoint replay.
+ *                       Format: "METHOD|/route" (e.g., "GET|/shield/health").
+ */
+function shield_hmac_v2_nonce_once($manager_id, $nonce, $timestamp, $scope = '') {
+  $scope_part   = ($scope !== '') ? ('|' . $scope) : '';
+  $transient_key = 'shield_hmac_n_' . md5($manager_id . '|' . $nonce . '|' . (string)$timestamp . $scope_part);
   if (get_transient($transient_key)) {
     return false;
   }
@@ -159,7 +169,12 @@ function shield_verify_hmac_v2(WP_REST_Request $request) {
     return false;
   }
 
-  if (!shield_hmac_v2_nonce_once($manager_id, $nonce, $timestamp)) {
+  if (!shield_hmac_v2_nonce_once(
+    $manager_id,
+    $nonce,
+    $timestamp,
+    strtoupper($request->get_method()) . '|' . $request->get_route()
+  )) {
     return false;
   }
 
@@ -275,6 +290,16 @@ function register_shield_options_endpoint() {
   register_rest_route('shield/v2', '/health', array(
     'methods'             => 'GET',
     'callback'            => 'shield_health_v2_callback',
+    'permission_callback' => '__return_true',
+  ));
+
+  // Credential trust probe: SaaS GETs this with a valid HMAC v2 signature.
+  // Returns 200 when the key exists and the signature verifies; 401 otherwise.
+  // Used by SaaS health-check to auto-detect credential loss and schedule
+  // re-bootstrap without manual DB intervention.
+  register_rest_route('shield/v2', '/trust', array(
+    'methods'             => 'GET',
+    'callback'            => 'shield_trust_v2_callback',
     'permission_callback' => '__return_true',
   ));
 }
@@ -460,5 +485,33 @@ function shield_health_v2_callback(WP_REST_Request $request) {
     'domain'   => class_exists('Helpers') ? Helpers::getSiteUrl() : home_url(),
     'gateways' => $gateways,
     'time'     => time(),
+  ), 200);
+}
+
+/**
+ * HMAC v2 trust probe.
+ *
+ * SaaS sends a GET request with full HMAC v2 headers (X-Shield-Manager-Id,
+ * X-Shield-Key-Id, X-Shield-Signature, X-Shield-Nonce, X-Shield-Timestamp).
+ * Returns 200 when the key exists and the signature verifies, 401 otherwise.
+ *
+ * This is a credential liveness check — it does not process payments or
+ * produce side effects beyond the nonce transient written by shield_verify_hmac_v2.
+ *
+ * @param WP_REST_Request $request
+ * @return WP_REST_Response
+ */
+function shield_trust_v2_callback(WP_REST_Request $request) {
+  if (!shield_verify_hmac_v2($request)) {
+    return new WP_REST_Response(array(
+      'ok'      => false,
+      'code'    => 'unauthorized',
+      'message' => 'HMAC verification failed or key not found',
+    ), 401);
+  }
+
+  return new WP_REST_Response(array(
+    'ok'   => true,
+    'time' => time(),
   ), 200);
 }

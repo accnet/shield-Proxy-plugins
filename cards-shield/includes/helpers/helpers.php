@@ -37,10 +37,36 @@ class Helpers {
       return false;
     }
 
+    // Build the request URI exactly as the signing site computed it:
+    // 1. Start from the raw server URI.
+    // 2. Strip WordPress home-path prefix for subdirectory installs so the
+    //    canonical matches even when WP is not installed at root.
+    //    e.g. site1 home_url = https://example.com/shop  →  strip "/shop"
+    // 3. Normalize non-root path trailing slashes so a proxy that adds/removes
+    //    them does not break the canonical comparison.
     $request_uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/';
-    $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
+    $home_path = rtrim((string) parse_url(home_url(), PHP_URL_PATH), '/');
+    if ($home_path !== '' && strpos($request_uri, $home_path . '/') === 0) {
+      $request_uri = substr($request_uri, strlen($home_path));
+    } elseif ($home_path !== '' && $request_uri === $home_path) {
+      $request_uri = '/';
+    }
+    // Normalize trailing slash on non-root paths only
+    if ($request_uri !== '/' && substr($request_uri, -1) === '?') {
+      // preserve
+    } elseif ($request_uri !== '/') {
+      $q_pos = strpos($request_uri, '?');
+      if ($q_pos !== false) {
+        $path_part  = rtrim(substr($request_uri, 0, $q_pos), '/');
+        $query_part = substr($request_uri, $q_pos);
+        $request_uri = ($path_part ?: '/') . $query_part;
+      } else {
+        $request_uri = rtrim($request_uri, '/') ?: '/';
+      }
+    }
 
     // Replay cache is scoped per route/method to prevent cross-endpoint nonce reuse.
+    $method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : 'GET';
     $nonce_scope = $method . '|' . $request_uri;
     $nonce_key = 'shield_hmac_n_' . md5($manager_id . '|' . $nonce . '|' . (string)$timestamp . '|' . $nonce_scope);
     if (get_transient($nonce_key)) {
@@ -170,6 +196,19 @@ class Helpers {
       return;
     }
 
+    if (array_key_exists('order_id', $payload)) {
+      $payload['order_id'] = self::normalizePaymentReference($payload['order_id']);
+    }
+    if (array_key_exists('order_invoice', $payload)) {
+      $payload['order_invoice'] = self::normalizePaymentReference($payload['order_invoice']);
+    }
+    if (array_key_exists('shield_id', $payload)) {
+      $payload['shield_id'] = self::normalizePaymentReference($payload['shield_id']);
+    }
+    if (array_key_exists('trace_id', $payload)) {
+      $payload['trace_id'] = self::normalizePaymentReference($payload['trace_id']);
+    }
+
     $payments = self::getStripeWebhookPayments();
     $existing = isset($payments[$paymentIntentId]) && is_array($payments[$paymentIntentId]) ? $payments[$paymentIntentId] : [];
     $payments[$paymentIntentId] = array_merge($existing, $payload, [
@@ -222,6 +261,11 @@ class Helpers {
     $row['transactionId'] = $transactionId;
     $row['source'] = sanitize_text_field((string) ($row['source'] ?? ''));
     $row['nextState'] = sanitize_text_field((string) ($row['nextState'] ?? ''));
+    $row['orderId'] = self::normalizePaymentReference($row['orderId'] ?? null);
+    $row['orderNumber'] = self::normalizePaymentReference($row['orderNumber'] ?? null);
+    $row['traceId'] = self::normalizePaymentReference($row['traceId'] ?? null);
+    $row['managerId'] = self::normalizePaymentReference($row['managerId'] ?? null);
+    $row['site2Url'] = self::normalizePaymentReference($row['site2Url'] ?? null);
 
     if ($row['source'] === '' || $row['nextState'] === '') {
       return false;
@@ -389,5 +433,109 @@ class Helpers {
       $queue[$idx]['next_attempt_at'] = time() + $delay;
     }
     return $queue;
+  }
+
+  public static function normalizeFundingSource($value) {
+    if ($value === null) {
+      return null;
+    }
+
+    $normalized = strtolower(sanitize_text_field((string) $value));
+    if ($normalized === '') {
+      return null;
+    }
+
+    $aliases = [
+      'pay_pal' => 'paypal',
+      'paypal_wallet' => 'paypal',
+      'wallet' => 'paypal',
+      'credit_card' => 'card',
+      'debit_card' => 'card',
+    ];
+    if (isset($aliases[$normalized])) {
+      $normalized = $aliases[$normalized];
+    }
+
+    return in_array($normalized, ['card', 'paypal', 'venmo', 'apple_pay', 'google_pay', 'paylater'], true)
+      ? $normalized
+      : null;
+  }
+
+  public static function extractPayPalFundingSource($orderOrPaymentSource) {
+    if (is_object($orderOrPaymentSource)) {
+      $orderOrPaymentSource = (array) $orderOrPaymentSource;
+    }
+    if (!is_array($orderOrPaymentSource) || !$orderOrPaymentSource) {
+      return null;
+    }
+
+    $paymentSource = null;
+    $customId = null;
+
+    if (isset($orderOrPaymentSource['payment_source'])) {
+      $paymentSource = $orderOrPaymentSource['payment_source'];
+    }
+
+    if (isset($orderOrPaymentSource['purchase_units'])) {
+      $purchaseUnits = $orderOrPaymentSource['purchase_units'];
+      if (is_array($purchaseUnits) && !empty($purchaseUnits[0])) {
+        $firstPU = $purchaseUnits[0];
+        if (is_object($firstPU)) {
+          $firstPU = (array) $firstPU;
+        }
+        if (is_array($firstPU) && isset($firstPU['custom_id'])) {
+          $customId = $firstPU['custom_id'];
+        }
+      }
+    }
+
+    // Backward compatibility: if it doesn't look like an order, treat it as the payment_source itself
+    if ($paymentSource === null && $customId === null) {
+      $paymentSource = $orderOrPaymentSource;
+    }
+
+    if ($customId !== null) {
+      $normalized = self::normalizeFundingSource($customId);
+      if ($normalized !== null) {
+        return $normalized;
+      }
+    }
+
+    if ($paymentSource !== null) {
+      if (is_object($paymentSource)) {
+        $paymentSource = (array) $paymentSource;
+      }
+      if (is_array($paymentSource)) {
+        foreach (['card', 'paypal', 'venmo', 'apple_pay', 'google_pay', 'paylater'] as $candidate) {
+          if (!empty($paymentSource[$candidate])) {
+            return self::normalizeFundingSource($candidate);
+          }
+        }
+
+        foreach ($paymentSource as $candidate => $value) {
+          if (!empty($value)) {
+            $normalized = self::normalizeFundingSource($candidate);
+            if ($normalized !== null) {
+              return $normalized;
+            }
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private static function normalizePaymentReference($value) {
+    if ($value === null) {
+      return null;
+    }
+
+    $normalized = sanitize_text_field((string) $value);
+    if ($normalized === '' || $normalized === '0') {
+      return null;
+    }
+
+    return $normalized;
   }
 }

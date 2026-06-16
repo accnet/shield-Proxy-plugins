@@ -690,7 +690,8 @@ class WC_WOOTIFY_Gateway extends WC_Payment_Gateway {
                  }
             }
             $order->update_meta_data('_cs_paypal_checkout_page', 'checkout');
-            $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+            $fundingSource = cs_paypal_extract_funding_source_from_payment_source($data->order ?? null);
+            $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
             $order->save_meta_data();
             if ($data->status === 'success' && isset($ppPayment)) {
                  if ($this->intent == OPT_CS_PAYPAL_AUTHORIZE) {

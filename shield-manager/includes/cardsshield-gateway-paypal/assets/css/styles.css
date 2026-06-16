@@ -19,9 +19,12 @@
     padding-right: 20px;
     padding-left: 20px;
     right: 50%;
-    background: white;
     translate: 50%;
-    top: -15px;
+    top: -10px;
+    border-radius: 5px;
+    color: #1f1f1f;
+    font-weight: 600;
+    font-size: 15px;
 }
 
 .important-hide {
@@ -217,4 +220,15 @@
 .starterkit-checkout__payment .payment_method_WOOTIFY_paypal label .wootify-paypal-payment-icon:first-of-type,
 .starterkit-checkout-summary .payment_method_WOOTIFY_paypal label .wootify-paypal-payment-icon:first-of-type {
     margin-left: auto !important;
+}
+
+#wootify-paypal-credit-form-container-custom {
+    max-width: 380px;
+    margin: 0 auto;
+}
+
+#payment-paypal-area-custom {
+    display: block;
+    margin: 0 auto;
+    width: 100%;
 }

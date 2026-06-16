@@ -710,8 +710,9 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                     $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
                  }
             }
+            $fundingSource = ep_paypal_extract_funding_source_from_payment_source($data->order ?? null);
             $order->update_meta_data('_ep_paypal_checkout_page', 'checkout');
-            $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+            $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
             $order->save_meta_data();
             if ($data->status === 'success' && isset($ppPayment)) {
                  if ($this->intent == EP_PAYPAL_INTENT_AUTHORIZE) {
@@ -739,7 +740,13 @@ class WC_Endpoint_PayPal_Gateway extends WC_Payment_Gateway {
                          $activatedProxy['shieldId'],
                          $order->get_total(),
                          $order->get_id(),
-                         $order->get_currency()
+                         $order->get_currency(),
+                         [
+                             'providerTransactionId' => $ppPayment->id ?? null,
+                             'idempotencyKey' => 'paypal:checkout:' . $order->get_id() . ':' . ($ppPayment->id ?? ''),
+                             'paymentStatus' => 'succeeded',
+                             'fundingSource' => $fundingSource,
+                         ]
                      );
                  }
                  ep_paypal_save_transaction_id($order, $ppPayment->id);

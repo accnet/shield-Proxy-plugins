@@ -77,7 +77,7 @@ function ep_paypal_add_gateway_class($gateways) {
     return $gateways;
 }
 
-add_action('get_header', 'ep_paypal_handle_return');
+add_action('wp_loaded', 'ep_paypal_handle_return', 20);
 add_action('wp', 'ep_paypal_ensure_session'); // Ensure there is a customer session so that nonce is not invalidated by new session created on AJAX POST request.
 
 function endpoint_paypal_rotation_checker() {
@@ -91,6 +91,10 @@ function ep_paypal_ensure_session() {
     $frontend = (!is_admin() || defined('DOING_AJAX')) && !defined('DOING_CRON') && !defined('REST_REQUEST');
 
     if (!$frontend) {
+        return;
+    }
+
+    if (!function_exists('WC') || !WC() || !isset(WC()->session) || !is_object(WC()->session) || !method_exists(WC()->session, 'has_session')) {
         return;
     }
 
@@ -335,9 +339,14 @@ function ep_paypal_handle_return() {
         ]);
         if (is_wp_error($response)) {
             ep_paypal_error_log($response, "pp request checkout error[12]");
+            return false;
         }
         $body = wp_remote_retrieve_body($response);
         $data = json_decode($body);
+        if (!is_object($data) || !isset($data->status)) {
+            ep_paypal_error_log($body, 'wootify-paypal-button-create-order invalid response');
+            return false;
+        }
         if ($data->status === 'failed' && isset($data->error_detail)) {
             ep_paypal_error_log($body, 'wootify-paypal-button-create-order FAIL');
             if (in_array($data->error_detail, ['PAYEE_ACCOUNT_LOCKED_OR_CLOSED', 'PAYEE_ACCOUNT_RESTRICTED'])) {
@@ -693,8 +702,9 @@ function ep_paypal_handle_button_create_woo_order($cart, $ppOrderId, $currentPro
             $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
         }
     }
+    $fundingSource = ep_paypal_extract_funding_source_from_payment_source($data->order ?? null);
     $order->update_meta_data('_ep_paypal_checkout_page', 'express');
-    $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+    $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
         if ($wootifyPPGateway->intent == EP_PAYPAL_INTENT_AUTHORIZE) {
@@ -727,6 +737,7 @@ function ep_paypal_handle_button_create_woo_order($cart, $ppOrderId, $currentPro
                             'providerTransactionId' => $ppPayment->id ?? null,
                             'idempotencyKey' => 'paypal:express:' . $order->get_id() . ':' . ($ppPayment->id ?? ''),
                             'paymentStatus' => 'succeeded',
+                            'fundingSource' => $fundingSource,
                         ]
                     );
         } else {
@@ -887,8 +898,9 @@ function ep_paypal_handle_button_create_woo_order_at_pay_for_order($order_id, $p
             $ppPayment = $data->order->purchase_units[0]->payments->captures[0];
         }
     }
+    $fundingSource = ep_paypal_extract_funding_source_from_payment_source($data->order ?? null);
     $order->update_meta_data('_ep_paypal_checkout_page', 'express');
-    $order->update_meta_data('_shield_paypal_funding_source', $data->order->purchase_units[0]->custom_id ?? null);
+    $order->update_meta_data('_shield_paypal_funding_source', $fundingSource);
     $order->save_meta_data();
     if ($data->status === 'success' && isset($ppPayment)) {
         if ($wootifyPPGateway->intent == EP_PAYPAL_INTENT_AUTHORIZE) {
@@ -912,7 +924,12 @@ function ep_paypal_handle_button_create_woo_order_at_pay_for_order($order_id, $p
         $order->reduce_order_stock();
         $isEnableEndpointMode = true;
         if ($isEnableEndpointMode) {
-                    Shield_PayPal_Endpoint_Client::report_transaction($activatedProxy['shieldId'] ?? null, $order->get_total(), $order->get_id(), $order->get_currency());
+                    Shield_PayPal_Endpoint_Client::report_transaction($activatedProxy['shieldId'] ?? null, $order->get_total(), $order->get_id(), $order->get_currency(), [
+                        'providerTransactionId' => $ppPayment->id ?? null,
+                        'idempotencyKey' => 'paypal:express:' . $order->get_id() . ':' . ($ppPayment->id ?? ''),
+                        'paymentStatus' => 'succeeded',
+                        'fundingSource' => $fundingSource,
+                    ]);
         } else {
             if (ep_paypal_is_enabled_amount_rotation()) {
                 ep_paypal_perform_proxy_amount_rotation($activatedProxy, $order->get_total());
@@ -1334,7 +1351,7 @@ function ep_paypal_init_gateway_class() {
                     <?php
                     if ($isCheckoutPage) {
                     ?>
-                        <div id="paypal-button-express-text" class="cs_pp_element">Express Checkout</div>
+                        <!-- <div id="paypal-button-express-text" class="cs_pp_element">Express Checkout</div> -->
                     <?php
                     } else {
                     ?>

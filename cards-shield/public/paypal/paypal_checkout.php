@@ -36,11 +36,12 @@ $disablefundingParam = $disableFunding !== '' ? '&disable-funding=' . $disableFu
 				display: none !important;
 			}
 
-			#paypal-button-container.express_button_style {
+			#paypal-button-container {
 				display: flex;
+				flex-direction: column;
 				align-items: center;
 				justify-content: center;
-				margin-top: 15px
+				margin-top: 15px;
 			}
 		</style>
 	</head>

@@ -287,6 +287,11 @@ class Shield_PayPal_Endpoint_Client
             'paymentStatus'  => self::normalize_payment_status($meta['paymentStatus'] ?? $meta['payment_status'] ?? 'succeeded'),
         ];
 
+        $funding_source = self::normalize_receipt_value($meta['fundingSource'] ?? $meta['funding_source'] ?? '');
+        if (!empty($funding_source)) {
+            $payload['fundingSource'] = $funding_source;
+        }
+
         foreach ([
             'providerTransactionId' => ['providerTransactionId', 'provider_transaction_id', 'transaction_id'],
             'paymentIntentId'       => ['paymentIntentId', 'payment_intent_id'],

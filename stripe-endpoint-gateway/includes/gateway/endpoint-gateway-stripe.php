@@ -36,7 +36,7 @@ function ep_stripe_gateway_stripe_daily_process() {
 
 add_action('plugins_loaded', 'ep_stripe_add_gateway_stripe_init');
 add_action('wp_loaded', 'ep_stripe_handle_link_express_post_route');
-add_action('get_header', 'ep_stripe_handle_route');
+add_action('wp_loaded', 'ep_stripe_handle_route', 20);
 add_action('woocommerce_admin_order_totals_after_total', 'ep_stripe_admin_order_totals_after_total', 10, 1);
 
 function ep_stripe_get_setting_value($key, $default = null) {
@@ -244,7 +244,7 @@ function ep_stripe_attempt_webhook_fallback($order, $activatedProxy, $paymentInt
 }
 
 function ep_stripe_direct_webhook_callback_url() {
-    return rest_url('shield-manager/v1/stripe-webhook/direct');
+    return rest_url('shield-endpoint/v1/stripe-webhook/direct');
 }
 
 function ep_stripe_find_repairable_orders($limit = 20) {
@@ -330,6 +330,20 @@ function ep_stripe_redirect_and_exit($url) {
     exit();
 }
 
+function ep_stripe_suspend_cache_addition() {
+    if (function_exists('wp_suspend_cache_addition')) {
+        wp_suspend_cache_addition(true);
+    }
+}
+
+function ep_stripe_wc_notice($message, $type = 'error') {
+    if (!function_exists('wc_add_notice') || !function_exists('WC') || !WC() || !isset(WC()->session) || !is_object(WC()->session)) {
+        return;
+    }
+
+    wc_add_notice($message, $type);
+}
+
 function ep_stripe_handle_route() {
     if (isset($_POST['wootify-stripe-link-create-woo-order'])) {
         ep_stripe_handle_link_express_create_woo_order();
@@ -337,9 +351,11 @@ function ep_stripe_handle_route() {
     }
 
     if (isset($_GET['endpoint_stripe_return_result']) && isset($_GET['order_id'])) {
-        $order = wc_get_order($_GET['order_id']);
+        ep_stripe_suspend_cache_addition();
+
+        $order = wc_get_order(absint($_GET['order_id']));
         if (!$order) {
-            wc_add_notice('We cannot process your payment right now, please try another payment method.[11]', 'error');
+            ep_stripe_wc_notice('We cannot process your payment right now, please try another payment method.[11]', 'error');
             return ep_stripe_redirect_and_exit(wc_get_checkout_url());
         }
 
@@ -353,18 +369,20 @@ function ep_stripe_handle_route() {
         $requestAttemptToken = isset($_GET['attempt_token']) ? sanitize_text_field($_GET['attempt_token']) : '';
         if (!empty($savedAttemptToken) && $savedAttemptToken !== $requestAttemptToken) {
             ep_stripe_error_log("Attempt token mismatch: order expects '{$savedAttemptToken}', got '{$requestAttemptToken}'");
-            wc_add_notice('This payment attempt is outdated. Please try again.', 'error');
+            ep_stripe_wc_notice('This payment attempt is outdated. Please try again.', 'error');
             return ep_stripe_redirect_and_exit(wc_get_checkout_url());
         }
 
         if (!$activeProxyId = $order->get_meta(METAKEY_EP_STRIPE_PROXY_ID)) {
-            $activeProxyId = WC()->session->get('ep-stripe-proxy-active-id');
+            if (function_exists('WC') && WC() && isset(WC()->session) && is_object(WC()->session)) {
+                $activeProxyId = WC()->session->get('ep-stripe-proxy-active-id');
+            }
         }
         $activatedProxy = ep_stripe_find_activated_proxy_data_by_id(get_option(EP_ST_NODES, []), $activeProxyId);
 
         if (!$activatedProxy) {
             ep_stripe_error_log("Can't find activated proxy!\n");
-            wc_add_notice('We cannot accept any payments right now. Please comeback to try tomorrow or select other payment methods if available.', 'error');
+            ep_stripe_wc_notice('We cannot accept any payments right now. Please comeback to try tomorrow or select other payment methods if available.', 'error');
             return ep_stripe_redirect_and_exit(wc_get_checkout_url());
         }
         $confirmUrl = $activatedProxy['url'] . '?' . http_build_query([
@@ -395,10 +413,10 @@ function ep_stripe_handle_route() {
                 if ($fallback['type'] === 'success' || $fallback['type'] === 'processing') {
                     return ep_stripe_redirect_and_exit($order->get_checkout_order_received_url());
                 }
-                wc_add_notice('We cannot process your payment right now, please try another payment method.[fallback-failed]', 'error');
+                ep_stripe_wc_notice('We cannot process your payment right now, please try another payment method.[fallback-failed]', 'error');
                 return ep_stripe_redirect_and_exit(wc_get_checkout_url());
             }
-            wc_add_notice('We cannot process your payment right now, please try another payment method.', 'error');
+            ep_stripe_wc_notice('We cannot process your payment right now, please try another payment method.', 'error');
             return ep_stripe_redirect_and_exit(wc_get_checkout_url());
         }
         $rawBody = wp_remote_retrieve_body($response);
@@ -414,7 +432,7 @@ function ep_stripe_handle_route() {
             if (is_array($fallback) && !empty($fallback['handled']) && ($fallback['type'] === 'success' || $fallback['type'] === 'processing')) {
                 return ep_stripe_redirect_and_exit($order->get_checkout_order_received_url());
             }
-            wc_add_notice('We cannot process your payment right now, please try another payment method.[invalid-response]', 'error');
+            ep_stripe_wc_notice('We cannot process your payment right now, please try another payment method.[invalid-response]', 'error');
             return ep_stripe_redirect_and_exit(wc_get_checkout_url());
         }
         $paymentStripeIntent = ep_stripe_get_setting_value('intent', 'capture');
@@ -579,6 +597,9 @@ function ep_stripe_handle_link_express_create_woo_order() {
     $activeProxyId = WC()->session->get('ep-stripe-proxy-active-id');
     $activatedProxy = ep_stripe_find_activated_proxy_data_by_id(get_option(EP_ST_NODES, []), $activeProxyId);
     if (!$activatedProxy) {
+        // Clear stale session so next attempt re-resolves the proxy cleanly
+        WC()->session->set('ep-stripe-proxy-active-id', null);
+        WC()->session->set('ep-stripe-proxy-active-url', null);
         wp_send_json_error(['message' => 'Stripe shield is not available.'], 400);
     }
 
@@ -1293,7 +1314,7 @@ function ep_stripe_add_gateway_stripe_init() {
 ?>
                 <tr valign="top">
                     <td colspan="2" class="forminp forminp-<?php echo sanitize_title($value['type']) ?>">
-                        <a href="<?php echo admin_url('admin.php?page=wootify-gateway-stripe'); ?>" class="button"><?php _e('Config Shields', 'custom_stripe'); ?></a>
+                        <a href="<?php echo admin_url('admin.php?page=endpoint-stripe'); ?>" class="button"><?php _e('Config Shields', 'custom_stripe'); ?></a>
                     </td>
                 </tr>
                 <?php
@@ -1460,7 +1481,7 @@ function ep_stripe_add_gateway_stripe_init() {
                 ob_start();
                 ?>
                 <div id="wootify-stripe-link-express-container" class="cs-stripe-link-express" style="display:none">
-                    <div id="stripe-link-express-text">Express Checkout</div>
+                    <!-- <div id="stripe-link-express-text">Express Checkout</div> -->
                     <iframe id="payment-stripe-link-area"
                             referrerpolicy="no-referrer"
                             allow="payment *"
@@ -1541,60 +1562,94 @@ function ep_stripe_add_gateway_stripe_init() {
                 $hasShield = false;
                 while (true) {
                     $nextProxyUrl = WC()->session->get('ep-stripe-proxy-active-url');
-                    $nextProxyId = WC()->session->get('ep-stripe-proxy-active-id');
+                    $nextProxyId  = WC()->session->get('ep-stripe-proxy-active-id');
                     if (!$nextProxyUrl) {
                         break;
                     }
+                    // Resolve the full proxy array so ep_stripe_signed_request_args
+                    // has access to derivedKey and can build valid HMAC headers.
+                    // Passing a plain URL string causes the helper to do a URL-match
+                    // scan that may fail on trailing-slash differences, leaving
+                    // requests unsigned and site1 returning 401.
+                    $nextProxy = ep_stripe_find_activated_proxy_data_by_id(
+                        get_option(EP_ST_NODES, []),
+                        $nextProxyId
+                    );
                     $statusUrl = $nextProxyUrl . '?' . http_build_query([
                         'wootify-stripe-pe-get-account-charge-status' => uniqid(),
                     ]);
                     $traceId = ep_stripe_generate_trace_id();
-                    $response = wp_remote_get($statusUrl, ep_stripe_signed_request_args($nextProxyUrl, 'GET', $statusUrl, [
-                        '_shield_gateway' => 'stripe',
-                        'sslverify' => false,
-                        'timeout' => 5 * 60,
-                        'headers' => [
-                            'X-Shield-Trace-Id' => $traceId,
-                        ],
-                    ]));
+                    $response = wp_remote_get($statusUrl, ep_stripe_signed_request_args(
+                        $nextProxy ?: $nextProxyUrl, // array with derivedKey; fallback to string only if node not found
+                        'GET',
+                        $statusUrl,
+                        [
+                            '_shield_gateway' => 'stripe',
+                            'sslverify' => false,
+                            'timeout' => 5 * 60,
+                            'headers' => [
+                                'X-Shield-Trace-Id' => $traceId,
+                            ],
+                        ]
+                    ));
 
                     if (is_wp_error($response)) {
                         ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $response, 'trace_id' => $traceId], 'API check charge fail!');
                         if (ep_stripe_is_enabled_amount_rotation()) {
                             ep_stripe_perform_proxy_amount_rotation(WC()->cart->get_total(false));
-                        } elseif (isEnabledOrderRotation('Stripe')) {
-                            performProxyOrderRotation(false, 'Stripe');
+                        } elseif (function_exists('isEnabledOrderRotation') && isEnabledOrderRotation('Stripe')) {
+                            if (function_exists('performProxyOrderRotation')) {
+                                performProxyOrderRotation(false, 'Stripe');
+                            }
                         } else {
                             ep_stripe_set_next_proxy_by_time_rotation();
                         }
                         ep_stripe_find_and_set_next_proxy();
                     } else {
+                        $httpCode    = (int) wp_remote_retrieve_response_code($response);
                         $bodyResponse = wp_remote_retrieve_body($response);
                         $body = json_decode($bodyResponse);
+
+                        // 401: HMAC credentials missing on site1 — rotating to another node
+                        // will not help because all nodes use the same manager. Log a diagnostic
+                        // message pointing directly at the root cause.
+                        if ($httpCode === 401) {
+                            ep_stripe_error_log([
+                                'proxy_url'  => $nextProxyUrl,
+                                'proxy_id'   => $nextProxyId,
+                                'trace_id'   => $traceId,
+                                'http_code'  => 401,
+                                'action'     => 'Check shield_hmac_keys_v2 option on site1. Run: POST /wp-json/shield/v2/bootstrap with manager_id, key_id, hmac_secret=derivedKey, gateway=stripe',
+                            ], '[HMAC-401] site1 rejected HMAC — credentials not bootstrapped or derivedKey mismatch');
+                            break; // All nodes share the same manager — pointless to rotate
+                        }
+
                         if ($body->status === 'deactive') {
                             ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'Proxy move to unused because check charge status deactive!');
                             ep_stripe_move_to_unused_proxy_ids([WC()->session->get('ep-stripe-proxy-active-id')]);
                             ep_stripe_find_and_set_next_proxy();
-                        } else if ($body->status === 'active') {
+                        } elseif ($body->status === 'active') {
                             if (isset($body->health_status) && $body->health_status === 'degraded') {
                                 ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'Proxy health degraded but still usable.');
                             }
                             ep_stripe_debug_log([
-                                'trace_id' => $traceId,
+                                'trace_id'      => $traceId,
                                 'correlation_id' => $body->correlation_id ?? null,
-                                'proxy_url' => $nextProxyUrl,
-                                'proxy_id' => $nextProxyId,
+                                'proxy_url'     => $nextProxyUrl,
+                                'proxy_id'      => $nextProxyId,
                                 'health_status' => $body->health_status ?? 'healthy',
-                                'mode' => $body->mode ?? null,
+                                'mode'          => $body->mode ?? null,
                             ], 'Stripe proxy health check success');
                             $hasShield = true;
                             break;
                         } else {
-                            ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $bodyResponse, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'account status unknown!');
+                            ep_stripe_error_log([$nextProxyUrl, $nextProxyId, $bodyResponse, 'http_code' => $httpCode, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null], 'account status unknown!');
                             if (ep_stripe_is_enabled_amount_rotation()) {
                                 ep_stripe_perform_proxy_amount_rotation(WC()->cart->get_total(false));
-                            } elseif (isEnabledOrderRotation('Stripe')) {
-                                performProxyOrderRotation(false, 'Stripe');
+                            } elseif (function_exists('isEnabledOrderRotation') && isEnabledOrderRotation('Stripe')) {
+                                if (function_exists('performProxyOrderRotation')) {
+                                    performProxyOrderRotation(false, 'Stripe');
+                                }
                             } else {
                                 ep_stripe_set_next_proxy_by_time_rotation();
                             }
@@ -1869,14 +1924,14 @@ function ep_stripe_add_gateway_stripe_init() {
                     ];
                 } else {
                     ep_stripe_error_log([$response, 'trace_id' => $traceId, 'correlation_id' => $body->correlation_id ?? null, 'proxy_url' => $activatedProxy['url'], 'order_id' => $order->get_id()], 'Stripe request payment error');
-                    // Empty cart
-                    $order->update_status('failed');
+
+                    // Handle duplicate_request BEFORE setting failed to prevent unwanted
+                    // side-effect hooks (email, stock restore) from firing on a race condition.
                     if ($body->code === 'duplicate_request') {
                         // Lock is protecting against double charge — do NOT mark order failed.
                         // If a PI already exists, request 1 may have succeeded or be in-flight.
                         $existingPiId = ep_stripe_get_transaction_id($order);
                         if ($existingPiId) {
-                            $order->update_status('pending'); // restore from 'failed' we just set
                             $order->add_order_note(sprintf(
                                 __('Stripe idempotency lock active (duplicate request blocked by proxy %s). Order held pending. PI: %s', 'wootify'),
                                 $activatedProxy['url'],
@@ -1895,17 +1950,21 @@ function ep_stripe_add_gateway_stripe_init() {
                             'trace_id'  => $traceId,
                             'proxy_url' => $activatedProxy['url'],
                         ], 'Stripe duplicate_request — no PI found, treating as transient lock error');
-                        $order->update_status('pending'); // restore; caller can retry
                         $order->save();
                         wc_add_notice(__('Your payment is being processed. Please wait a moment and check your order status before trying again.', 'wootify'), 'error');
                         return false;
-                    } elseif ($body->code === 'domain_whitelist_not_allow') {
+                    }
+
+                    // For all other error codes: mark order failed now
+                    $order->update_status('failed');
+
+                    if ($body->code === 'domain_whitelist_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
                             'Domain whitelist is required'
                         ));
-                    } else if ($body->code === 'customer_zipcode_not_allow') {
+                    } elseif ($body->code === 'customer_zipcode_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
@@ -1913,7 +1972,7 @@ function ep_stripe_add_gateway_stripe_init() {
                         ));
                         wc_add_notice('The selected payment method is suspended, Please contact merchant for more information.', 'error');
                         return false;
-                    } else if ($body->code === 'customer_email_not_allow') {
+                    } elseif ($body->code === 'customer_email_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
@@ -1921,7 +1980,7 @@ function ep_stripe_add_gateway_stripe_init() {
                         ));
                         wc_add_notice('The selected payment method is suspended, Please contact merchant for more information.', 'error');
                         return false;
-                    } else if ($body->code === 'states_cities_not_allow') {
+                    } elseif ($body->code === 'states_cities_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
@@ -1929,7 +1988,7 @@ function ep_stripe_add_gateway_stripe_init() {
                         ));
                         wc_add_notice('Sorry, Your selected products are not available to purchase due to our policy violation.', 'error');
                         return false;
-                    } else if ($body->code === 'order_total_not_allow') {
+                    } elseif ($body->code === 'order_total_not_allow') {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s', 'wootify'),
                             $activatedProxy['url'],
@@ -1947,7 +2006,7 @@ function ep_stripe_add_gateway_stripe_init() {
                         $order->add_order_note(sprintf(
                             __('Stripe charged ERROR by proxy %s, ERROR message: %s, Payment Intent ID: %s', 'wootify'),
                             $activatedProxy['url'],
-                            is_string($err) ?: $err->message,
+                            is_string($err) ? $err : ($err->message ?? 'Unknown error'),
                             $paymentIntentId
                         ));
                     }
@@ -1984,7 +2043,10 @@ function ep_stripe_add_gateway_stripe_init() {
             }
 
             private function refund_order($order, $order_id, $amount, $refundType, $reason) {
-                $proxyUrl = $order->get_meta(MetaKey_Stripe_Proxy_Url);
+                // Use METAKEY_EP_STRIPE_PROXY_URL (= '_ep_stripe_proxy_url') — the same key
+                // written by process_payment(). MetaKey_Stripe_Proxy_Url ('_endpoint_stripe_proxy_url')
+                // is the shield-manager constant and would always return null here.
+                $proxyUrl = $order->get_meta(METAKEY_EP_STRIPE_PROXY_URL);
 
                 // do API call
                 $url = $proxyUrl . "?" . http_build_query([

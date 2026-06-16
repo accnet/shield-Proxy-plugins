@@ -19,6 +19,7 @@ try {
     $orderResult = $paypal->get($order_id);
     if (isset($orderResult['order']['id'])) {
       $status = strtoupper((string) ($orderResult['order']['status'] ?? ''));
+      $fundingSource = Helpers::extractPayPalFundingSource($orderResult['order'] ?? null);
       if (method_exists('Helpers', 'queuePaymentTransitionLog')) {
         Helpers::queuePaymentTransitionLog([
           'gateway' => 'paypal',
@@ -31,6 +32,7 @@ try {
           'traceId' => isset($_SERVER['HTTP_X_SHIELD_TRACE_ID']) ? sanitize_text_field((string) $_SERVER['HTTP_X_SHIELD_TRACE_ID']) : '',
           'metadata' => [
             'gateway_response_code' => $status,
+            'funding_source' => $fundingSource,
           ],
         ]);
       }

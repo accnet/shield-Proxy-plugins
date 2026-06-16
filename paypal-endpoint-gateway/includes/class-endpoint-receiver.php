@@ -133,15 +133,24 @@ class Shield_PayPal_Endpoint_Receiver
             update_option(Shield_PayPal_Endpoint_Client::opt('PAUSED'), $paused_option, true);
         }
 
+        // Auto-sync: update HMAC secret nếu được push từ SaaS sau khi rotate
+        $secret_synced = false;
+        if (!empty($data['endpointHmacSecret']) && is_string($data['endpointHmacSecret'])) {
+            update_option(self::opt('HMAC_SECRET'), sanitize_text_field($data['endpointHmacSecret']), true);
+            $secret_synced = true;
+            self::log('HMAC secret auto-synced from SaaS rotate.');
+        }
+
         update_option(self::opt('LAST_SYNC_AT'), time(), true);
 
         self::log('Config update received: ' . count($data['nodes'] ?? []) . ' nodes, paused=' . ($paused_bool ? 'yes' : 'no'));
 
         return new WP_REST_Response([
-            'success'  => true,
-            'paused'   => $paused_bool,
-            'provider' => 'paypal',
-            'message'  => $paused_bool ? 'PayPal endpoint gateway paused' : 'PayPal endpoint gateway resumed/active',
+            'success'       => true,
+            'paused'        => $paused_bool,
+            'secret_synced' => $secret_synced,
+            'provider'      => 'paypal',
+            'message'       => $paused_bool ? 'PayPal endpoint gateway paused' : 'PayPal endpoint gateway resumed/active',
         ], 200);
     }
 
