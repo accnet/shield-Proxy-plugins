@@ -160,5 +160,10 @@ add_action('init', function () {
     Shield_Stripe_Endpoint_Cron::register();
 });
 
-register_activation_hook(__FILE__, function () { Shield_Stripe_Endpoint_Cron::register(); });
+register_activation_hook(__FILE__, function () {
+    Shield_Stripe_Endpoint_Cron::register();
+    if (class_exists('Shield_Stripe_Endpoint_Client')) {
+        Shield_Stripe_Endpoint_Client::pull_config();
+    }
+});
 register_deactivation_hook(__FILE__, function () { Shield_Stripe_Endpoint_Cron::unregister(); });

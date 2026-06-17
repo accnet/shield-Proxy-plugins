@@ -213,6 +213,9 @@ add_action('init', function () {
 // ─── Activation / Deactivation ────────────────────────────────────────────────
 register_activation_hook(__FILE__, function () {
     Shield_PayPal_Endpoint_Cron::register();
+    if (class_exists('Shield_PayPal_Endpoint_Client')) {
+        Shield_PayPal_Endpoint_Client::pull_config();
+    }
 });
 
 register_deactivation_hook(__FILE__, function () {
