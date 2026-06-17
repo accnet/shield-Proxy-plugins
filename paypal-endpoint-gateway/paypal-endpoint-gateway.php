@@ -11,7 +11,7 @@
  * Plugin Name: PayPal Endpoint Gateway
  * Plugin URI:  https://wootify.dev
  * Description: WooCommerce PayPal payment gateway via Shield Proxy Endpoint - Independent rotation managed by SaaS
- * Version:     1.0.3
+ * Version:     1.0.4
  * Author:      Wootify
  * Author URI:  https://wootify.dev
  * Text Domain: endpoint-paypal
@@ -25,7 +25,7 @@ if (!defined('ABSPATH')) {
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-define('ENDPOINT_PAYPAL_VERSION', '1.0.3');
+define('ENDPOINT_PAYPAL_VERSION', '1.0.4');
 define('ENDPOINT_PAYPAL_PLUGIN_FILE', __FILE__);
 define('ENDPOINT_PAYPAL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('ENDPOINT_PAYPAL_PLUGIN_URL', plugin_dir_url(__FILE__));
