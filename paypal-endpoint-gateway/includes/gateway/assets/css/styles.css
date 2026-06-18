@@ -223,6 +223,10 @@
 }
 
 #wootify-paypal-credit-form-container-custom {
+    width: 100%;
+}
+
+.woocommerce-checkout #wootify-paypal-credit-form-container-custom {
     max-width: 380px;
     margin: 0 auto;
 }
