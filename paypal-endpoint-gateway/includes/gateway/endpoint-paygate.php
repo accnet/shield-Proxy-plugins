@@ -1470,3 +1470,181 @@ function ep_paypal_plugin_activation() {
 function ep_paypal_pp_remove_shipping_taxes(WC_Order_Item_Shipping $item) {
     $item->set_taxes(false);
 }
+
+// ─── Orders List: Sync button, filter dropdown, bulk actions ─────────────────
+
+// Dedicated AJAX action (avoids conflict with shield-manager's WOOTIFY_gateway_paypal_action)
+add_action('wp_ajax_ep_paypal_woo_action', 'ep_paypal_woo_action_handler');
+
+function ep_paypal_woo_action_handler() {
+    $command = sanitize_text_field($_POST['command'] ?? '');
+    switch ($command) {
+        case 'ep_paypal_sync_tracking_info':
+            ep_paypal_sync_tracking_info();
+            break;
+        default:
+            echo json_encode(['success' => false, 'error' => 'Unknown command']);
+            break;
+    }
+    wp_die();
+}
+
+// Sync button on Orders list top bar (classic post table)
+add_action('manage_posts_extra_tablenav', function ($which) {
+    global $typenow;
+    ep_paypal_admin_order_list_sync_button($typenow, $which);
+}, 20, 1);
+
+// Sync button on Orders list top bar (HPOS)
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_action('woocommerce_order_list_table_extra_tablenav', 'ep_paypal_admin_order_list_sync_button', 20, 2);
+}
+
+function ep_paypal_admin_order_list_sync_button($type, $which) {
+    if ('shop_order' === $type && 'top' === $which) {
+        wp_register_style(
+            'ep_paypal_woo_css',
+            plugins_url('assets/css/woo_styles.css', __FILE__),
+            [],
+            ENDPOINT_PAYPAL_VERSION
+        );
+        wp_enqueue_style('ep_paypal_woo_css');
+
+        wp_register_script(
+            'ep_paypal_woo_scripts',
+            plugins_url('assets/js/woo_scripts.js', __FILE__),
+            ['jquery'],
+            ENDPOINT_PAYPAL_VERSION
+        );
+        wp_enqueue_script('ep_paypal_woo_scripts');
+        wp_localize_script('ep_paypal_woo_scripts', 'ep_paypal_ajax_object', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+        ]);
+
+        $countOrderNeedSync = ep_paypal_count_order_need_sync();
+        ?>
+        <div class="alignleft actions custom">
+            <input id="ep-sync-count" type="hidden" value="<?= esc_attr($countOrderNeedSync) ?>"/>
+            <button type="button" class="button button-primary" id="ep-sync-tracking-info-btn">
+                Sync PayPal Endpoint: <?= esc_html($countOrderNeedSync) ?><span class="load loading"></span>
+            </button>
+        </div>
+        <?php
+    }
+}
+
+// Filter dropdown by sync status (classic post table)
+add_action('restrict_manage_posts', function () {
+    global $typenow;
+    ep_paypal_filter_orders_by_sync_status($typenow);
+}, 20, 1);
+
+// Filter dropdown by sync status (HPOS)
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_action('woocommerce_order_list_table_extra_tablenav', 'ep_paypal_filter_orders_by_sync_status', 20);
+}
+
+function ep_paypal_filter_orders_by_sync_status($type) {
+    if ('shop_order' === $type) {
+        $current = isset($_GET['_ep_order_sync_status']) ? wc_clean($_GET['_ep_order_sync_status']) : '';
+        ?>
+        <select name="_ep_order_sync_status" id="dropdown_ep_order_sync_status">
+            <option value="">Filter by PayPal (Endpoint) tracking sync</option>
+            <option value="<?= EP_PAYPAL_NOT_SYNCED ?>" <?php selected((string) EP_PAYPAL_NOT_SYNCED, $current); ?>>
+                Unsynced
+            </option>
+            <option value="<?= EP_PAYPAL_SYNCED ?>" <?php selected((string) EP_PAYPAL_SYNCED, $current); ?>>
+                Synced
+            </option>
+            <option value="<?= EP_PAYPAL_SYNC_ERROR ?>" <?php selected((string) EP_PAYPAL_SYNC_ERROR, $current); ?>>
+                Sync error
+            </option>
+        </select>
+        <?php
+    }
+}
+
+// Apply filter to WP_Query (classic post table)
+add_filter('request', 'ep_paypal_filter_orders_by_sync_status_query');
+function ep_paypal_filter_orders_by_sync_status_query($vars) {
+    global $typenow;
+    if (
+        'shop_order' === $typenow
+        && isset($_GET['_ep_order_sync_status'])
+        && '' !== $_GET['_ep_order_sync_status']
+    ) {
+        $vars['meta_query'][] = [
+            'key'     => METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO,
+            'value'   => wc_clean($_GET['_ep_order_sync_status']),
+            'compare' => '=',
+        ];
+    }
+    return $vars;
+}
+
+// Bulk actions: change PayPal (endpoint) sync status
+add_filter('bulk_actions-edit-shop_order', 'ep_paypal_register_tracking_sync_bulk_actions');
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_filter('bulk_actions-woocommerce_page_wc-orders', 'ep_paypal_register_tracking_sync_bulk_actions');
+}
+function ep_paypal_register_tracking_sync_bulk_actions($bulk_actions) {
+    $bulk_actions['ep_change_pp_sync_status_to_synced']   = 'Change PayPal (Endpoint) sync status to synced';
+    $bulk_actions['ep_change_pp_sync_status_to_unsynced'] = 'Change PayPal (Endpoint) sync status to unsynced';
+    return $bulk_actions;
+}
+
+add_action('handle_bulk_actions-edit-shop_order', 'ep_paypal_bulk_process_tracking_status', 20, 3);
+function ep_paypal_bulk_process_tracking_status($redirect, $doaction, $object_ids) {
+    if ('ep_change_pp_sync_status_to_synced' === $doaction) {
+        foreach ($object_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if (!$order) continue;
+            $order->update_meta_data(METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNCED);
+            $order->save_meta_data();
+        }
+        $redirect = add_query_arg([
+            'ep_bulk_action' => 'ep_change_pp_sync_status_to_synced',
+            'changed'        => count($object_ids),
+        ], $redirect);
+    }
+
+    if ('ep_change_pp_sync_status_to_unsynced' === $doaction) {
+        foreach ($object_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if (!$order) continue;
+            $order->update_meta_data(METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_NOT_SYNCED);
+            $order->save_meta_data();
+        }
+        $redirect = add_query_arg([
+            'ep_bulk_action' => 'ep_change_pp_sync_status_to_unsynced',
+            'changed'        => count($object_ids),
+        ], $redirect);
+    }
+
+    return $redirect;
+}
+
+// Admin notices after bulk action
+add_action('admin_notices', 'ep_paypal_tracking_status_bulk_notices');
+function ep_paypal_tracking_status_bulk_notices() {
+    if (
+        isset($_REQUEST['ep_bulk_action'])
+        && in_array($_REQUEST['ep_bulk_action'], ['ep_change_pp_sync_status_to_synced', 'ep_change_pp_sync_status_to_unsynced'], true)
+        && !empty($_REQUEST['changed'])
+    ) {
+        $count  = (int) $_REQUEST['changed'];
+        $status = $_REQUEST['ep_bulk_action'] === 'ep_change_pp_sync_status_to_synced' ? 'synced' : 'unsynced';
+        printf(
+            '<div id="message" class="updated notice is-dismissible"><p>%s</p></div>',
+            esc_html(sprintf(
+                _n(
+                    '%d order PayPal (Endpoint) tracking sync status changed to %s.',
+                    '%d orders PayPal (Endpoint) tracking sync statuses changed to %s.',
+                    $count
+                ),
+                $count,
+                $status
+            ))
+        );
+    }
+}

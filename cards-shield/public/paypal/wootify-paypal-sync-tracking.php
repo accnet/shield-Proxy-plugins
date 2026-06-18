@@ -108,7 +108,13 @@ try {
 
   $batches = array_chunk($shippingData, $batchSize);
   foreach ($batches as $index => $batch) {
-    $trackersPayload = ['trackers' => $batch];
+    // Strip order_id before sending to PayPal API (internal field only)
+    $cleanBatch = array_map(function ($tracker) {
+      $clean = $tracker;
+      unset($clean['order_id']);
+      return $clean;
+    }, $batch);
+    $trackersPayload = ['trackers' => $cleanBatch];
     $batchResult = $paypal->shipping($trackersPayload);
 
     shield_sync_tracking_log('info', 'PayPal tracking batch API response', [
@@ -211,36 +217,41 @@ try {
 
     foreach ($batch as $i => $tracker) {
       $key = (isset($tracker['transaction_id']) ? $tracker['transaction_id'] : '') . '|' . (isset($tracker['tracking_number']) ? $tracker['tracking_number'] : '');
+      $orderId = isset($tracker['order_id']) ? $tracker['order_id'] : null;
       if (isset($duplicateIndexes[$i])) {
         $trackerResults[] = [
-          'index' => $i,
-          'tracker' => $tracker,
-          'status' => 'duplicate',
-          'message' => 'Tracking number already exists on PayPal'
+          'index'    => $i,
+          'order_id' => $orderId,
+          'tracker'  => $tracker,
+          'status'   => 'duplicate',
+          'message'  => 'Tracking number already exists on PayPal'
         ];
       }
       elseif (isset($errorIndexes[$i])) {
         $trackerResults[] = [
-          'index' => $i,
-          'tracker' => $tracker,
-          'status' => 'error',
-          'message' => $errorIndexes[$i]
+          'index'    => $i,
+          'order_id' => $orderId,
+          'tracker'  => $tracker,
+          'status'   => 'error',
+          'message'  => $errorIndexes[$i]
         ];
       }
       elseif (isset($createdMap[$key])) {
         $trackerResults[] = [
-          'index' => $i,
-          'tracker' => $tracker,
-          'status' => 'created',
-          'message' => 'Created'
+          'index'    => $i,
+          'order_id' => $orderId,
+          'tracker'  => $tracker,
+          'status'   => 'created',
+          'message'  => 'Created'
         ];
       }
       else {
         $trackerResults[] = [
-          'index' => $i,
-          'tracker' => $tracker,
-          'status' => 'unknown',
-          'message' => 'Not returned by API and no explicit error'
+          'index'    => $i,
+          'order_id' => $orderId,
+          'tracker'  => $tracker,
+          'status'   => 'unknown',
+          'message'  => 'Not returned by API and no explicit error'
         ];
       }
     }

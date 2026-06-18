@@ -1,7 +1,7 @@
 jQuery(document).ready( function($)
 {
-    $(document).on('click', '#sync-tracking-info-btn', function () {
-        var syncCount = $('#sync-count').val();
+    $(document).on('click', '#ep-sync-tracking-info-btn', function () {
+        var syncCount = $('#ep-sync-count').val();
         if (parseInt(syncCount) === 0) {
             alert("Don't have unsynced orders");
             return;
@@ -9,11 +9,11 @@ jQuery(document).ready( function($)
         $(this).addClass('activeLoading');
 
         var data = {
-            'action': 'WOOTIFY_gateway_paypal_action',
+            'action': 'ep_paypal_woo_action',
             'command': 'ep_paypal_sync_tracking_info',
         };
         jQuery.ajaxSetup({timeout: 300000});
-        jQuery.post(cs_ajax_object.ajax_url, data, function (response) {
+        jQuery.post(ep_paypal_ajax_object.ajax_url, data, function (response) {
             var responseJson = JSON.parse(response);
             $(this).removeClass('activeLoading');
             if (responseJson.success) {
@@ -25,7 +25,7 @@ jQuery(document).ready( function($)
         }).fail(function () {
             alert('Error when sync tracking info. Please try again after![2]');
         }).always(function () {
-            $('#sync-tracking-info-btn').removeClass('activeLoading');
+            $('#ep-sync-tracking-info-btn').removeClass('activeLoading');
         });
     });
 });

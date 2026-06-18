@@ -1511,3 +1511,393 @@ function cs_paypal_plugin_activation() {
 function WOOTIFY_pp_remove_shipping_taxes(WC_Order_Item_Shipping $item) {
     $item->set_taxes(false);
 }
+
+// ─── Orders List: Sync button, filter dropdown, bulk actions ────────────────
+
+// Register AJAX handler for all paypal admin actions
+add_action('wp_ajax_WOOTIFY_gateway_paypal_action', 'WOOTIFY_gateway_paypal_action');
+
+function WOOTIFY_gateway_paypal_action() {
+    switch ($_POST['command']) {
+        case 'changeRotationMethod':
+            changeRotationMethod();
+            break;
+        case 'addNewProxy':
+            addNewProxy();
+            break;
+        case 'deleteProxy':
+            deleteProxy();
+            break;
+        case 'activateProxy':
+            activateProxy();
+            break;
+        case 'moveToUnusedProxies':
+            moveToUnusedProxies();
+            break;
+        case 'saveProxies':
+            saveProxies();
+            break;
+        case 'moveBackProxies':
+            moveBackProxies();
+            break;
+        case 'syncTrackingInfo':
+            syncTrackingInfo();
+            break;
+        case 'changeConnectionMode':
+            changeConnectionMode();
+            break;
+        case 'saveEndpointSettings':
+            saveEndpointSettings();
+            break;
+        default:
+            break;
+    }
+    wp_die();
+}
+
+// Sync button on Orders list top bar (classic post table)
+add_action('manage_posts_extra_tablenav', function ($which) {
+    global $typenow;
+    cs_pp_admin_order_list_sync_button($typenow, $which);
+}, 20, 1);
+
+// Sync button on Orders list top bar (HPOS)
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_action('woocommerce_order_list_table_extra_tablenav', 'cs_pp_admin_order_list_sync_button', 20, 2);
+}
+
+function cs_pp_admin_order_list_sync_button($type, $which) {
+    if ('shop_order' === $type && 'top' === $which) {
+        wp_register_style(
+            'WOOTIFY_woo_css',
+            plugins_url('assets/css/woo_styles.css', __FILE__),
+            [],
+            OPT_WOOTIFY_PAYPAL_VERSION
+        );
+        wp_enqueue_style('WOOTIFY_woo_css');
+
+        wp_register_script(
+            'WOOTIFY_woo_scripts',
+            plugins_url('assets/js/woo_scripts.js', __FILE__),
+            ['jquery'],
+            OPT_WOOTIFY_PAYPAL_VERSION
+        );
+        wp_enqueue_script('WOOTIFY_woo_scripts');
+        wp_localize_script('WOOTIFY_woo_scripts', 'cs_paypal_ajax_object', [
+            'ajax_url' => admin_url('admin-ajax.php'),
+            'we_value' => 1234,
+        ]);
+
+        $countOrderNeedSync = countOrderNeedSync();
+        ?>
+        <div class="alignleft actions custom">
+            <input id="cs-sync-count" type="hidden" value="<?= esc_attr($countOrderNeedSync) ?>"/>
+            <button type="button" class="button button-primary" id="cs-sync-tracking-info-btn">
+                Sync PayPal Manager: <?= esc_html($countOrderNeedSync) ?><span class="load loading"></span>
+            </button>
+        </div>
+        <?php
+    }
+}
+
+// Filter dropdown by sync status (classic post table)
+add_action('restrict_manage_posts', function () {
+    global $typenow;
+    cs_pp_filter_orders_by_sync_status($typenow);
+}, 20, 1);
+
+// Filter dropdown by sync status (HPOS)
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_action('woocommerce_order_list_table_extra_tablenav', 'cs_pp_filter_orders_by_sync_status', 20);
+}
+
+function cs_pp_filter_orders_by_sync_status($type) {
+    if ('shop_order' === $type) {
+        $current = isset($_GET['_shop_order_sync_status']) ? wc_clean($_GET['_shop_order_sync_status']) : '';
+        ?>
+        <select name="_shop_order_sync_status" id="dropdown_shop_order_sync_status">
+            <option value="">Filter by PayPal tracking sync status</option>
+            <option value="<?= OPT_CS_PAYPAL_NOT_SYNCED ?>" <?php selected(OPT_CS_PAYPAL_NOT_SYNCED, $current); ?>>
+                Unsynced
+            </option>
+            <option value="<?= OPT_CS_PAYPAL_SYNCED ?>" <?php selected(OPT_CS_PAYPAL_SYNCED, $current); ?>>
+                Synced
+            </option>
+            <option value="<?= OPT_CS_PAYPAL_SYNC_ERROR ?>" <?php selected(OPT_CS_PAYPAL_SYNC_ERROR, $current); ?>>
+                Sync error
+            </option>
+        </select>
+        <?php
+    }
+}
+
+// Apply filter to WP_Query (classic post table)
+add_filter('request', 'cs_pp_filter_orders_by_sync_status_query');
+function cs_pp_filter_orders_by_sync_status_query($vars) {
+    global $typenow;
+    if (
+        'shop_order' === $typenow
+        && isset($_GET['_shop_order_sync_status'])
+        && '' !== $_GET['_shop_order_sync_status']
+    ) {
+        $vars['meta_query'][] = [
+            'key'     => METAKEY_PAYPAL_SYNC_TRACKING_INFO,
+            'value'   => wc_clean($_GET['_shop_order_sync_status']),
+            'compare' => '=',
+        ];
+    }
+    return $vars;
+}
+
+// Bulk actions: change PayPal sync status
+add_filter('bulk_actions-edit-shop_order', 'cs_pp_register_tracking_sync_bulk_action');
+if (get_option('woocommerce_custom_orders_table_enabled') === 'yes') {
+    add_filter('bulk_actions-woocommerce_page_wc-orders', 'cs_pp_register_tracking_sync_bulk_action');
+}
+function cs_pp_register_tracking_sync_bulk_action($bulk_actions) {
+    $bulk_actions['cs_change_pp_sync_status_to_synced']   = 'Change PayPal sync status to synced';
+    $bulk_actions['cs_change_pp_sync_status_to_unsynced'] = 'Change PayPal sync status to unsynced';
+    return $bulk_actions;
+}
+
+add_action('handle_bulk_actions-edit-shop_order', 'cs_pp_bulk_process_tracking_status', 20, 3);
+function cs_pp_bulk_process_tracking_status($redirect, $doaction, $object_ids) {
+    if ('cs_change_pp_sync_status_to_synced' === $doaction) {
+        foreach ($object_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if (!$order) continue;
+            $order->update_meta_data(METAKEY_PAYPAL_SYNC_TRACKING_INFO, OPT_CS_PAYPAL_SYNCED);
+            $order->save_meta_data();
+        }
+        $redirect = add_query_arg([
+            'bulk_action' => 'cs_change_pp_sync_status_to_synced',
+            'changed'     => count($object_ids),
+        ], $redirect);
+    }
+
+    if ('cs_change_pp_sync_status_to_unsynced' === $doaction) {
+        foreach ($object_ids as $order_id) {
+            $order = wc_get_order($order_id);
+            if (!$order) continue;
+            $order->update_meta_data(METAKEY_PAYPAL_SYNC_TRACKING_INFO, OPT_CS_PAYPAL_NOT_SYNCED);
+            $order->save_meta_data();
+        }
+        $redirect = add_query_arg([
+            'bulk_action' => 'cs_change_pp_sync_status_to_unsynced',
+            'changed'     => count($object_ids),
+        ], $redirect);
+    }
+
+    return $redirect;
+}
+
+// Admin notices after bulk action
+add_action('admin_notices', 'cs_pp_tracking_status_bulk_notices');
+function cs_pp_tracking_status_bulk_notices() {
+    if (
+        isset($_REQUEST['bulk_action'])
+        && in_array($_REQUEST['bulk_action'], ['cs_change_pp_sync_status_to_synced', 'cs_change_pp_sync_status_to_unsynced'], true)
+        && !empty($_REQUEST['changed'])
+    ) {
+        $count  = (int) $_REQUEST['changed'];
+        $status = $_REQUEST['bulk_action'] === 'cs_change_pp_sync_status_to_synced' ? 'synced' : 'unsynced';
+        printf(
+            '<div id="message" class="updated notice is-dismissible"><p>%s</p></div>',
+            esc_html(sprintf(
+                _n('%d order PayPal tracking sync status changed to %s.', '%d orders PayPal tracking sync statuses changed to %s.', $count),
+                $count,
+                $status
+            ))
+        );
+    }
+}
+
+// ─── AJAX Sub-functions (called by WOOTIFY_gateway_paypal_action) ────────────
+
+function changeRotationMethod() {
+    $isSuccess = update_option(OPT_WOOTIFY_PAYPAL_ROTATION_METHOD, sanitize_text_field($_POST['rotationMethod'] ?? ''), true);
+    echo json_encode(['success' => $isSuccess]);
+}
+
+function activateProxy() {
+    $rotationMethod = sanitize_text_field($_POST['rotationMethod'] ?? '');
+    $proxyID        = sanitize_text_field($_POST['proxyID'] ?? '');
+
+    $proxies = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
+    foreach ($proxies as $proxy) {
+        if ($proxy['id'] == $proxyID) {
+            update_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, $proxy, true);
+            if ($rotationMethod === OPT_CS_PAYPAL_BY_TIME) {
+                update_option(OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE, time(), true);
+            }
+            if (function_exists('logRotation')) {
+                logRotation($rotationMethod, $proxy, 'Force');
+            }
+            echo json_encode(['success' => true]);
+            return;
+        }
+    }
+    echo json_encode(['success' => false]);
+}
+
+function deleteProxy() {
+    $deleteProxyIds = isset($_POST['deleteProxyIds']) && is_array($_POST['deleteProxyIds'])
+        ? array_map('sanitize_text_field', $_POST['deleteProxyIds'])
+        : [];
+    $proxies = get_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, []);
+    foreach ($proxies as $key => $proxy) {
+        if (in_array($proxy['id'], $deleteProxyIds, true)) {
+            unset($proxies[$key]);
+        }
+    }
+    $isSuccess = update_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, array_values($proxies), true);
+    echo json_encode(['success' => $isSuccess]);
+}
+
+function addNewProxy() {
+    $rotationMethod = sanitize_text_field($_POST['rotationMethod'] ?? '');
+    $proxyUrl       = esc_url_raw(trim($_POST['proxyUrl'] ?? ''));
+    $rotationValue  = $_POST['rotationValue'] ?? '';
+
+    if (!is_numeric($rotationValue) || floatval($rotationValue) <= 0) {
+        echo json_encode(['success' => false, 'error' => 'Rotation value must be greater than 0!']);
+        return;
+    }
+
+    $proxies = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
+    if (!is_array($proxies)) {
+        $proxies = [];
+    }
+
+    $proxy = ['id' => uniqid(), 'url' => $proxyUrl, 'paid_amount' => 0];
+    if ($rotationMethod === OPT_CS_PAYPAL_BY_TIME) {
+        $proxy['timestamp'] = $rotationValue;
+        $proxy['amount']    = 0;
+    } else {
+        $proxy['timestamp'] = 0;
+        $proxy['amount']    = $rotationValue;
+    }
+    $proxies[] = $proxy;
+
+    $isSuccess      = update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
+    $activatedProxy = get_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, null);
+    if (empty($activatedProxy)) {
+        update_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, $proxies[0], true);
+        update_option(OPT_WOOTIFY_PAYPAL_CURRENT_ROTATION_VALUE, time(), true);
+        update_option(OPT_WOOTIFY_PAYPAL_ROTATION_METHOD, $rotationMethod, true);
+    }
+
+    echo json_encode(['success' => $isSuccess, 'addedProxy' => $proxy]);
+}
+
+function moveToUnusedProxies() {
+    $proxyIds = isset($_POST['proxyIds']) && is_array($_POST['proxyIds'])
+        ? array_map('sanitize_text_field', $_POST['proxyIds'])
+        : [];
+
+    $proxies       = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
+    $unusedProxies = get_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, []);
+    if (!is_array($proxies))       $proxies = [];
+    if (!is_array($unusedProxies)) $unusedProxies = [];
+
+    $activatedProxy = get_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, null);
+    if (isset($activatedProxy['id']) && in_array($activatedProxy['id'], $proxyIds, true)) {
+        echo json_encode(['success' => false, 'error' => "Can't move activated proxy to unused list!"]);
+        return;
+    }
+
+    foreach ($proxies as $key => $proxy) {
+        if (in_array($proxy['id'], $proxyIds, true)) {
+            $unusedProxies[] = $proxy;
+            unset($proxies[$key]);
+        }
+    }
+
+    $isSuccess1 = update_option(OPT_WOOTIFY_PAYPAL_PROXIES, array_values($proxies), true);
+    $isSuccess2 = update_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, $unusedProxies, true);
+    if (function_exists('getValidActivatedProxyData')) {
+        getValidActivatedProxyData(true);
+    }
+    echo json_encode(['success' => $isSuccess1 && $isSuccess2]);
+}
+
+function saveProxies() {
+    $rotationMethod = sanitize_text_field($_POST['rotationMethod'] ?? '');
+    $newProxies     = isset($_POST['proxies']) && is_array($_POST['proxies']) ? $_POST['proxies'] : [];
+
+    foreach ($newProxies as $newProxy) {
+        $rv = $newProxy['rotationValue'] ?? '';
+        if (!is_numeric($rv) || floatval($rv) <= 0) {
+            echo json_encode(['success' => false, 'error' => 'Rotation value must be greater than 0!']);
+            return;
+        }
+    }
+
+    $proxies        = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
+    $activatedProxy = get_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, null);
+
+    foreach ($proxies as $key => $proxy) {
+        if (!isset($newProxies[$key]) || $proxy['id'] !== $newProxies[$key]['id']) {
+            continue;
+        }
+        $proxies[$key]['url']       = esc_url_raw(trim($newProxies[$key]['url'] ?? ''));
+        $proxies[$key]['timestamp'] = $rotationMethod === OPT_CS_PAYPAL_BY_TIME
+            ? $newProxies[$key]['rotationValue']
+            : $proxies[$key]['timestamp'];
+        $proxies[$key]['amount']    = $rotationMethod === OPT_CS_PAYPAL_BY_AMOUNT
+            ? $newProxies[$key]['rotationValue']
+            : $proxies[$key]['amount'];
+
+        if (isset($activatedProxy['id']) && $activatedProxy['id'] === $proxy['id']) {
+            update_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, $proxies[$key], true);
+        }
+    }
+
+    update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
+    echo json_encode(['success' => true]);
+}
+
+function moveBackProxies() {
+    $moveBackProxyIds = isset($_POST['moveBackProxyIds']) && is_array($_POST['moveBackProxyIds'])
+        ? array_map('sanitize_text_field', $_POST['moveBackProxyIds'])
+        : [];
+
+    $proxies          = get_option(OPT_WOOTIFY_PAYPAL_PROXIES, []);
+    $unusedProxies    = get_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, []);
+    if (!is_array($proxies))       $proxies = [];
+    if (!is_array($unusedProxies)) $unusedProxies = [];
+
+    $needActiveFirst  = count($proxies) === 0;
+
+    foreach ($unusedProxies as $key => $proxy) {
+        if (in_array($proxy['id'], $moveBackProxyIds, true)) {
+            $proxies[] = $proxy;
+            unset($unusedProxies[$key]);
+        }
+    }
+
+    $isSuccess1 = update_option(OPT_WOOTIFY_PAYPAL_PROXIES, $proxies, true);
+    $isSuccess2 = update_option(OPT_WOOTIFY_PAYPAL_UNUSED_PROXIES, array_values($unusedProxies), true);
+
+    if ($needActiveFirst) {
+        update_option(OPT_WOOTIFY_PAYPAL_ACTIVATED_PROXY, isset($proxies[0]) ? $proxies[0] : null, true);
+    } elseif (function_exists('getValidActivatedProxyData')) {
+        getValidActivatedProxyData(true);
+    }
+
+    echo json_encode(['success' => $isSuccess1 && $isSuccess2]);
+}
+
+function changeConnectionMode() {
+    $connectionMode = sanitize_text_field($_POST['connectionMode'] ?? '');
+    $isSuccess      = update_option(OPT_WOOTIFY_PAYPAL_CONNECTION_MODE, $connectionMode, true);
+    echo json_encode(['success' => $isSuccess]);
+}
+
+function saveEndpointSettings() {
+    $endpointToken  = sanitize_text_field($_POST['endpointToken'] ?? '');
+    $endpointSecret = sanitize_text_field($_POST['endpointSecret'] ?? '');
+    update_option(OPT_CS_PAYPAL_ENDPOINT_TOKEN, $endpointToken, true);
+    update_option(OPT_CS_PAYPAL_ENDPOINT_SECRET, $endpointSecret, true);
+    echo json_encode(['success' => true]);
+}

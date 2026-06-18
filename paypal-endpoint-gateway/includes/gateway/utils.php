@@ -982,49 +982,85 @@ function ep_paypal_sync_tracking_info() {
                 ? wp_generate_uuid4()
                 : uniqid('shield-track-', true);
 
-            // Remove order_id field to add PayPal track
-            $shippingDataPush = array_map(function ($data) {
-                unset($data['order_id']);
-                return $data;
-            }, $shippingDataPart);
             $requestUrl = $proxyUrl . "?wootify-paypal-sync-tracking=1";
+            // order_id is kept in the payload so site1 can echo it back in tracker_results.
+            // site1 strips order_id before forwarding to PayPal API.
             $requestBody = wp_json_encode([
-                'trackers' => $shippingDataPush,
+                'trackers' => $shippingDataPart,
             ]);
             $response = wp_remote_post($requestUrl, ep_paypal_signed_request_args($proxyUrl, 'POST', $requestUrl, [
                 'timeout' => 5 * 60,
                 'headers' => [
-                    'Content-Type' => 'application/json',
+                    'Content-Type'      => 'application/json',
                     'X-Shield-Trace-Id' => $traceId,
                 ],
                 'body' => $requestBody,
             ], $requestBody));
 
             if ( is_wp_error( $response ) || 200 !== wp_remote_retrieve_response_code( $response ) ) {
+                // HTTP-level failure: mark all orders in this batch as error (fallback)
                 $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
                 ep_paypal_error_log([$response, $requestUrl, $orderIds, 'trace_id' => $traceId], "Sync data error![1]");
                 foreach ($orderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
+                    if (!$subOrder) continue;
                     $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
                     $subOrder->save_meta_data();
                 }
                 $hasError = true;
                 continue;
             }
-            $data = json_decode( wp_remote_retrieve_body( $response ) );
-            if ( ! $data->success ) {
-                $errorOrderIdList = array_unique(array_merge($errorOrderIdList, $orderIds));
-                ep_paypal_error_log([$response, $requestUrl, $orderIds, 'trace_id' => $traceId, 'correlation_id' => $data->correlation_id ?? null], "Sync data error![2]");
-                foreach ($orderIds as $orderId) {
-                    $subOrder = wc_get_order($orderId);
-                    $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
-                    $subOrder->save_meta_data();
+
+            $data = json_decode( wp_remote_retrieve_body( $response ), true );
+
+            // Per-order status update using tracker_results from site1 response
+            $updatedOrderIds = [];
+            if (
+                isset($data['batches']) && is_array($data['batches'])
+            ) {
+                foreach ($data['batches'] as $batchInfo) {
+                    if ( !isset($batchInfo['tracker_results']) || !is_array($batchInfo['tracker_results']) ) {
+                        continue;
+                    }
+                    foreach ($batchInfo['tracker_results'] as $res) {
+                        $resOrderId = isset($res['order_id']) ? (int) $res['order_id'] : 0;
+                        if ( !$resOrderId ) {
+                            continue;
+                        }
+                        $updatedOrderIds[] = $resOrderId;
+                        $subOrder = wc_get_order($resOrderId);
+                        if ( !$subOrder ) {
+                            continue;
+                        }
+                        // created or duplicate (already on PayPal) = success
+                        if ( in_array($res['status'], ['created', 'duplicate'], true) ) {
+                            $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNCED );
+                        } else {
+                            // error or unknown
+                            $errorOrderIdList[] = $resOrderId;
+                            $hasError = true;
+                            $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
+                        }
+                        $subOrder->save_meta_data();
+                    }
                 }
-                $hasError = true;
-            } else {
-                foreach ($orderIds as $orderId) {
+            }
+
+            // Fallback: any order not covered by tracker_results (e.g. site1 older version)
+            $missingOrderIds = array_diff($orderIds, $updatedOrderIds);
+            if ( !empty($missingOrderIds) ) {
+                ep_paypal_debug_log($missingOrderIds, 'Fallback bulk update for orders missing from tracker_results');
+                $allSuccess = isset($data['success']) && $data['success'];
+                foreach ($missingOrderIds as $orderId) {
                     $subOrder = wc_get_order($orderId);
-                    $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNCED );
+                    if (!$subOrder) continue;
+                    if ($allSuccess) {
+                        $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNCED );
+                    } else {
+                        $errorOrderIdList[] = $orderId;
+                        $hasError = true;
+                        $subOrder->update_meta_data( METAKEY_EP_PAYPAL_SYNC_TRACKING_INFO, EP_PAYPAL_SYNC_ERROR );
+                    }
                     $subOrder->save_meta_data();
                 }
             }
