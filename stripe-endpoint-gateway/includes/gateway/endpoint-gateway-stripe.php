@@ -2220,7 +2220,36 @@ function ep_stripe_action_wp_head() {
             ep_stripe_find_and_set_next_proxy();
             $proxyUrl = WC()->session->get('ep-stripe-proxy-active-url');
             if (!empty($proxyUrl)) {
-                echo '<link rel="preload" href="' . esc_url($proxyUrl . '?wootify-stripe-pe-get-payment-form=1') . '" as="document">';
+                $currency = get_woocommerce_currency();
+                $cart     = WC()->cart;
+
+                // Preload Credit Card iframe — URL khớp chính xác với iframe src trong payment_fields()
+                $ccParams = [
+                    'wootify-stripe-pe-get-payment-form' => 1,
+                    'amount'   => $cart->get_total(false) * 100,
+                    'currency' => $currency,
+                ];
+                echo '<link rel="preload" href="' . esc_url(add_query_arg($ccParams, $proxyUrl)) . '" as="document">';
+
+                // Preload Stripe Link Express iframe nếu tính năng được bật
+                $gateway = $gateways['endpoint_stripe'];
+                if (
+                    !isset($_GET['pay_for_order']) &&
+                    !$cart->is_empty() &&
+                    $gateway->get_option(EP_ST_LINK_EXPRESS_ENABLED, 'no') === 'yes'
+                ) {
+                    $linkAmount  = $gateway->get_stripe_amount($cart->get_total(false), $currency);
+                    $shippingAmt = $gateway->get_stripe_amount($cart->get_shipping_total(), $currency);
+                    $linkParams  = [
+                        'wootify-stripe-link-express-form' => 1,
+                        'amount'          => $linkAmount,
+                        'currency'        => $currency,
+                        'parent_origin'   => home_url(),
+                        'shipping_amount' => $shippingAmt,
+                        'shipping_label'  => __('Shipping', 'woocommerce'),
+                    ];
+                    echo '<link rel="preload" href="' . esc_url(add_query_arg($linkParams, $proxyUrl)) . '" as="document">';
+                }
             }
         }
     }
