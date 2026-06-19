@@ -115,7 +115,6 @@ class Shield_Stripe_Proxy_Service {
                         'woo_order_id' => (string) ($orderId ?? ''),
                         'processor_id' => (string) ($shieldId ?? ''),
                         'manager_id' => $this->managerId,
-                        'manager_callback_url' => $managerCallbackUrl,
                         'route_id' => $routeId,
                         'trace_id' => $this->traceId,
                         'merchant_site' => home_url(),
@@ -234,7 +233,6 @@ class Shield_Stripe_Proxy_Service {
                     'woo_order_id' => (string) ($orderId ?? ''),
                     'processor_id' => (string) ($shieldId ?? ''),
                     'manager_id' => $this->managerId,
-                    'manager_callback_url' => $managerCallbackUrl,
                     'route_id' => $routeId,
                     'trace_id' => $this->traceId,
                     'merchant_site' => home_url(),
@@ -337,9 +335,8 @@ class Shield_Stripe_Proxy_Service {
                 $shieldId = $this->normalizeReference((string) $metadata->processor_id);
             }
             $managerCallbackUrl = esc_url_raw((string) ($payload['manager_callback_url'] ?? ''));
-            if ($managerCallbackUrl === '' && is_object($metadata) && isset($metadata->manager_callback_url)) {
-                $managerCallbackUrl = esc_url_raw((string) $metadata->manager_callback_url);
-            }
+            // manager_callback_url không còn được lưu trong Stripe metadata.
+            // URL site2 được giải quyết qua route_id transient (Tier 1) hoặc local tracking (Tier 2).
 
             $this->log('info', 'Stripe confirm-payment completed', [
                 'payment_intent_id' => $paymentIntentId,

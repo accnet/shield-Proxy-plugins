@@ -353,10 +353,10 @@ class ShieldSettings {
         $route_id = is_object($metadata) && isset($metadata->route_id)
             ? sanitize_text_field((string) $metadata->route_id)
             : '';
-        $route_data = [];
-        $manager_callback_url = is_object($metadata) && isset($metadata->manager_callback_url)
-            ? esc_url_raw((string) $metadata->manager_callback_url)
-            : esc_url_raw((string) ($existing_payment['manager_callback_url'] ?? ''));
+        // manager_callback_url không còn được lưu trong Stripe metadata (đã loại bỏ để bảo vệ URL site2).
+        // Tier 1: giải quyết qua route_id → transient (block bên dưới).
+        // Tier 2: fallback về local payment tracking.
+        $manager_callback_url = esc_url_raw((string) ($existing_payment['manager_callback_url'] ?? ''));
         $shield_id = is_object($metadata) && isset($metadata->processor_id)
             ? (string) $metadata->processor_id
             : ($existing_payment['shield_id'] ?? '');
@@ -365,8 +365,9 @@ class ShieldSettings {
             : ($existing_payment['manager_id'] ?? '');
 
         if ($payment_intent_id !== '' && $transition_applied) {
-            // --- Callback URL resolution (3-tier) ---
-            // Tier 1: route_id → transient (new, highest priority)
+            // --- Callback URL resolution (2-tier) ---
+            // Tier 1: route_id → transient (highest priority)
+            $route_data = [];
             if ($route_id !== '') {
                 $route_data = get_transient('shield_route_' . $route_id);
                 if (is_array($route_data) && !empty($route_data['manager_callback_url'])) {
